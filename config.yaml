@@ -1,0 +1,37 @@
+# Application Configuration
+app:
+  name: "Gestion Locative Pro"
+  version: "1.0.0"
+  debug: true
+
+# Database Configuration
+database:
+  type: "sqlite"
+  # Use absolute path for SQLite
+  path: "D:\\code\\locations\\data\\gestion_locative.db"
+  # For production, consider PostgreSQL:
+  # type: "postgresql"
+  # host: "localhost"
+  # port: 5432
+  # name: "gestion_locative"
+  # user: "postgres"
+  # password: "your_password"
+
+# Export Configuration
+export:
+  default_format: "json"
+  backup_directory: "D:\\code\\locations\\backups"
+
+# PDF Receipt Configuration
+receipts:
+  template_path: "D:\\code\\locations\\app\\reports\\templates"
+  output_path: "D:\\code\\locations\\data\\receipts"
+  company_name: "Magic House"
+  company_address: ""
+  company_phone: ""
+
+# Logging Configuration
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: "D:\\code\\locations\\logs\\app.log"
