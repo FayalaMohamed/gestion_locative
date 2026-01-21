@@ -40,14 +40,12 @@ class Immeuble(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     nom = Column(String(200), nullable=False)
     adresse = Column(String(500), nullable=True)
-    nombre_bureaux = Column(Integer, default=0)
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relations
     bureaux = relationship("Bureau", back_populates="immeuble", cascade="all, delete-orphan")
-    locataires = relationship("Locataire", back_populates="immeuble")
 
     def __repr__(self):
         return f"<Immeuble(id={self.id}, nom='{self.nom}')>"
@@ -61,7 +59,6 @@ class Bureau(Base):
     numero = Column(String(50), nullable=False)
     etage = Column(String(50), nullable=True)
     surface_m2 = Column(Float, nullable=True)
-    est_disponible = Column(Boolean, default=True)
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -83,7 +80,6 @@ class Locataire(Base):
     __tablename__ = "locataires"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    immeuble_id = Column(Integer, ForeignKey("immeubles.id"), nullable=False)
     
     # Identification
     nom = Column(String(200), nullable=False)
@@ -96,12 +92,11 @@ class Locataire(Base):
     statut = Column(Enum(StatutLocataire), default=StatutLocataire.ACTIF)
     
     # Métadonnées
-    notes = Column(Text, nullable=True)
+    commentaires = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relations
-    immeuble = relationship("Immeuble", back_populates="locataires")
     contrats = relationship("Contrat", back_populates="locataire")
     paiements = relationship("Paiement", back_populates="locataire")
 
@@ -121,7 +116,6 @@ class Contrat(Base):
     
     # Dates du contrat
     date_debut = Column(Date, nullable=False)
-    date_fin = Column(Date, nullable=True)
     date_derniere_augmentation = Column(Date, nullable=True)
     
     # Montants (total pour tous les bureaux)
@@ -130,7 +124,7 @@ class Contrat(Base):
     montant_caution = Column(Numeric(10, 3), default=0)
     montant_pas_de_porte = Column(Numeric(10, 3), default=0)
     
-    # Premier compteur
+    # Compteur
     compteur_steg = Column(String(100), nullable=True)
     compteur_sonede = Column(String(100), nullable=True)
     
@@ -157,9 +151,6 @@ class Contrat(Base):
         est_resilie_val = getattr(self, 'est_resilie_col', None)
         if est_resilie_val is True:
             return False
-        date_fin_val = getattr(self, 'date_fin', None)
-        if date_fin_val is not None:
-            return date_fin_val >= datetime.now().date()
         return True
     
     def get_numeros_bureaux(self) -> list:

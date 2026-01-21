@@ -1,0 +1,297 @@
+#!/usr/bin/env python
+"""
+Simplified Bureau management view
+"""
+from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
+                               QPushButton, QTableWidget, QTableWidgetItem,
+                               QHeaderView, QLineEdit, QMessageBox,
+                               QFormLayout, QComboBox, QDoubleSpinBox, QSpinBox,
+                               QTextEdit, QDialog, QDialogButtonBox, QGridLayout)
+from PySide6.QtCore import Qt
+from sqlalchemy import func
+from app.models.entities import contrat_bureau
+
+
+class BureauView(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.parent_window = parent
+        self.setup_ui()
+        self.setup_connections()
+        self.load_data()
+        
+    def setup_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(15)
+        
+        header_layout = QHBoxLayout()
+        title = QLabel("Bureaux")
+        title.setStyleSheet("font-size: 24px; font-weight: bold; color: #2c3e50;")
+        header_layout.addWidget(title)
+        header_layout.addStretch()
+        
+        self.btn_refresh = QPushButton("Actualiser")
+        self.btn_refresh.setStyleSheet("background-color: #ecf0f1; padding: 8px 16px; border: 1px solid #bdc3c7; border-radius: 4px;")
+        header_layout.addWidget(self.btn_refresh)
+        
+        layout.addLayout(header_layout)
+        
+        filter_layout = QHBoxLayout()
+        
+        self.immeuble_combo = QComboBox()
+        self.immeuble_combo.setMinimumWidth(200)
+        self.immeuble_combo.addItem("Tous les immeubles", None)
+        filter_layout.addWidget(self.immeuble_combo)
+        
+        self.disponible_combo = QComboBox()
+        self.disponible_combo.addItem("Tous", None)
+        self.disponible_combo.addItem("Disponibles", True)
+        self.disponible_combo.addItem("Occupés", False)
+        filter_layout.addWidget(self.disponible_combo)
+        
+        filter_layout.addStretch()
+        layout.addLayout(filter_layout)
+        
+        self.table = QTableWidget()
+        self.table.setColumnCount(7)
+        self.table.setHorizontalHeaderLabels(["ID", "Numéro", "Immeuble", "Étage", "Surface", "Disponible", "Notes"])
+        self.table.horizontalHeader().setStretchLastSection(True)
+        self.table.setAlternatingRowColors(True)
+        self.table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.table.verticalHeader().setVisible(False)
+        layout.addWidget(self.table)
+        
+        buttons_layout = QHBoxLayout()
+        self.btn_add = QPushButton("Ajouter")
+        self.btn_add.setStyleSheet("background-color: #3498db; color: white; padding: 8px 16px; border-radius: 4px; border: none;")
+        buttons_layout.addWidget(self.btn_add)
+        
+        self.btn_edit = QPushButton("Modifier")
+        self.btn_edit.setStyleSheet("background-color: #ecf0f1; padding: 8px 16px; border: 1px solid #bdc3c7; border-radius: 4px;")
+        buttons_layout.addWidget(self.btn_edit)
+        
+        self.btn_delete = QPushButton("Supprimer")
+        self.btn_delete.setStyleSheet("background-color: #e74c3c; color: white; padding: 8px 16px; border-radius: 4px; border: none;")
+        buttons_layout.addWidget(self.btn_delete)
+        
+        buttons_layout.addStretch()
+        layout.addLayout(buttons_layout)
+        
+    def setup_connections(self):
+        self.btn_refresh.clicked.connect(self.load_data)
+        self.btn_add.clicked.connect(self.on_add)
+        self.btn_edit.clicked.connect(self.on_edit)
+        self.btn_delete.clicked.connect(self.on_delete)
+        self.immeuble_combo.currentIndexChanged.connect(self.load_data)
+        self.disponible_combo.currentIndexChanged.connect(self.load_data)
+        self.load_immeubles()
+        self.load_data()
+        
+    def load_data(self):
+        try:
+            from app.database.connection import get_database
+            from app.models.entities import Bureau, Immeuble, Contrat
+            from sqlalchemy.orm import joinedload
+            
+            db = get_database()
+            
+            with db.session_scope() as session:
+                query = session.query(Bureau).outerjoin(Immeuble)
+                
+                immeuble_id = self.immeuble_combo.currentData()
+                if immeuble_id is not None:
+                    query = query.filter(Bureau.immeuble_id == immeuble_id)
+                    
+                disponible = self.disponible_combo.currentData()
+                if disponible is not None:
+                    if disponible:
+                        query = query.filter(~Bureau.contrats.any(Contrat.est_resilie_col == False))
+                    else:
+                        query = query.filter(Bureau.contrats.any(Contrat.est_resilie_col == False))
+                    
+                bureaux = query.order_by(Bureau.numero).all()
+                
+                self.table.setRowCount(len(bureaux))
+                
+                for row, bur in enumerate(bureaux):
+                    self.table.setItem(row, 0, QTableWidgetItem(str(bur.id)))
+                    self.table.setItem(row, 1, QTableWidgetItem(f"#{bur.numero}"))
+                    img_name = bur.immeuble.nom if bur.immeuble else "N/A"
+                    self.table.setItem(row, 2, QTableWidgetItem(img_name))
+                    self.table.setItem(row, 3, QTableWidgetItem(bur.etage or ""))
+                    self.table.setItem(row, 4, QTableWidgetItem(f"{bur.surface_m2} m²" if bur.surface_m2 else ""))
+                    
+                    est_disponible = not any(c.est_resilie_col == False for c in bur.contrats)
+                    self.table.setItem(row, 5, QTableWidgetItem("Oui" if est_disponible else "Non"))
+                    self.table.setItem(row, 6, QTableWidgetItem(bur.notes or ""))
+                    
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur", f"Erreur: {str(e)}")
+            
+    def load_immeubles(self):
+        try:
+            from app.database.connection import get_database
+            from app.models.entities import Immeuble
+            
+            db = get_database()
+            with db.session_scope() as session:
+                immeubles = session.query(Immeuble).all()
+                self.immeuble_combo.clear()
+                self.immeuble_combo.addItem("Tous les immeubles", None)
+                for img in immeubles:
+                    self.immeuble_combo.addItem(img.nom, img.id)
+        except Exception as e:
+            print(f"Erreur: {e}")
+            
+    def on_add(self):
+        dialog = BureauDialog(self)
+        if dialog.exec() == QDialog.Accepted:
+            self.load_immeubles()
+            self.load_data()
+            
+    def on_edit(self):
+        selected = self.table.selectedItems()
+        if not selected:
+            QMessageBox.warning(self, "Sélection", "Sélectionnez un bureau")
+            return
+        item_id = int(self.table.item(selected[0].row(), 0).text())
+        dialog = BureauDialog(self, item_id)
+        if dialog.exec() == QDialog.Accepted:
+            self.load_data()
+            
+    def on_delete(self):
+        selected = self.table.selectedItems()
+        if not selected:
+            QMessageBox.warning(self, "Sélection", "Sélectionnez un bureau")
+            return
+        item_id = int(self.table.item(selected[0].row(), 0).text())
+        reply = QMessageBox.question(self, "Confirmation", "Supprimer?", QMessageBox.Yes | QMessageBox.No)
+        if reply == QMessageBox.Yes:
+            try:
+                from app.database.connection import get_database
+                from app.models.entities import Bureau, Contrat
+                db = get_database()
+                with db.session_scope() as session:
+                    bur = session.query(Bureau).get(item_id)
+                    if bur:
+                        contrat_count = session.query(func.count(Contrat.id)).join(contrat_bureau).filter(contrat_bureau.c.bureau_id == item_id).scalar()
+                        if contrat_count > 0:
+                            QMessageBox.warning(self, "Suppression impossible", 
+                                "Ce bureau est lié à un ou plusieurs contrats. Résiliez d'abord les contrats associés.")
+                            return
+                        session.delete(bur)
+                self.load_immeubles()
+                self.load_data()
+            except Exception as e:
+                QMessageBox.critical(self, "Erreur", str(e))
+
+
+class BureauDialog(QDialog):
+    def __init__(self, parent=None, bureau_id=None):
+        super().__init__(parent)
+        self.parent_view = parent
+        self.bureau_id = bureau_id
+        self.setWindowTitle("Modifier Bureau" if bureau_id else "Nouveau Bureau")
+        self.resize(450, 400)
+        self.setup_ui()
+        self.load_immeubles()
+        if bureau_id:
+            self.load_data()
+        
+    def setup_ui(self):
+        layout = QVBoxLayout(self)
+        form = QFormLayout()
+        form.setSpacing(15)
+        
+        self.immeuble_combo = QComboBox()
+        form.addRow("Immeuble*:", self.immeuble_combo)
+        
+        self.numero_spin = QSpinBox()
+        self.numero_spin.setMinimum(1)
+        self.numero_spin.setMaximum(9999)
+        form.addRow("Numéro*:", self.numero_spin)
+        
+        self.etage_edit = QLineEdit()
+        form.addRow("Étage:", self.etage_edit)
+        
+        self.surface_spin = QDoubleSpinBox()
+        self.surface_spin.setMinimum(0)
+        self.surface_spin.setMaximum(10000)
+        self.surface_spin.setSuffix(" m²")
+        self.surface_spin.setDecimals(1)
+        form.addRow("Surface:", self.surface_spin)
+        
+        self.notes_edit = QTextEdit()
+        self.notes_edit.setMaximumHeight(80)
+        form.addRow("Notes:", self.notes_edit)
+        
+        layout.addLayout(form)
+        layout.addStretch()
+        
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.validate)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+        
+    def load_immeubles(self):
+        try:
+            from app.database.connection import get_database
+            from app.models.entities import Immeuble
+            db = get_database()
+            with db.session_scope() as session:
+                immeubles = session.query(Immeuble).all()
+                self.immeuble_combo.clear()
+                self.immeuble_combo.addItem("", None)
+                for img in immeubles:
+                    self.immeuble_combo.addItem(img.nom, img.id)
+        except Exception as e:
+            print(f"Erreur: {e}")
+            
+    def load_data(self):
+        try:
+            from app.database.connection import get_database
+            from app.models.entities import Bureau
+            db = get_database()
+            with db.session_scope() as session:
+                bur = session.query(Bureau).get(self.bureau_id)
+                if bur:
+                    idx = self.immeuble_combo.findData(bur.immeuble_id)
+                    if idx >= 0:
+                        self.immeuble_combo.setCurrentIndex(idx)
+                    self.numero_spin.setValue(int(bur.numero) if bur.numero else 1)
+                    self.etage_edit.setText(bur.etage or "")
+                    self.surface_spin.setValue(bur.surface_m2 or 0)
+                    self.notes_edit.setText(bur.notes or "")
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur", str(e))
+            
+    def validate(self):
+        if self.immeuble_combo.currentData() is None:
+            QMessageBox.warning(self, "Validation", "Immeuble obligatoire")
+            return
+        try:
+            from app.database.connection import get_database
+            from app.models.entities import Bureau
+            db = get_database()
+            with db.session_scope() as session:
+                if self.bureau_id:
+                    bur = session.query(Bureau).get(self.bureau_id)
+                    if bur:
+                        bur.immeuble_id = self.immeuble_combo.currentData()
+                        bur.numero = self.numero_spin.value()
+                        bur.etage = self.etage_edit.text().strip() or None
+                        bur.surface_m2 = self.surface_spin.value()
+                        bur.notes = self.notes_edit.toPlainText().strip() or None
+                else:
+                    bur = Bureau(
+                        immeuble_id=self.immeuble_combo.currentData(),
+                        numero=self.numero_spin.value(),
+                        etage=self.etage_edit.text().strip() or None,
+                        surface_m2=self.surface_spin.value(),
+                        notes=self.notes_edit.toPlainText().strip() or None
+                    )
+                    session.add(bur)
+                self.accept()
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur", str(e))

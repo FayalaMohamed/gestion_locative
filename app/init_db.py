@@ -38,7 +38,6 @@ def create_sample_data() -> None:
         immeuble1 = Immeuble(
             nom="Immeuble Centre Ville",
             adresse="123 Avenue Habib Bourguiba, Tunis",
-            nombre_bureaux=10,
             notes="Immeuble moderne avec ascenseur"
         )
         session.add(immeuble1)
@@ -50,44 +49,41 @@ def create_sample_data() -> None:
             numero="101",
             etage="1er étage",
             surface_m2=50.0,
-            est_disponible=False,
             notes="Bureau spacieux avec vue sur rue"
         )
         bureau2 = Bureau(
             immeuble_id=immeuble1.id,
             numero="102",
             etage="1er étage",
-            surface_m2=35.0,
-            est_disponible=True
+            surface_m2=35.0
         )
         bureau3 = Bureau(
             immeuble_id=immeuble1.id,
             numero="201",
             etage="2ème étage",
-            surface_m2=45.0,
-            est_disponible=False
+            surface_m2=45.0
         )
         session.add_all([bureau1, bureau2, bureau3])
         session.flush()
         
         # Create sample locataires
         locataire1 = Locataire(
-            immeuble_id=immeuble1.id,
             nom="Mohamed Ben Ali",
             telephone="+216 98 123 456",
             email="mohamed.benali@email.com",
             cin="01234567",
             raison_sociale="Cabinet d'Expertise Comptable",
-            statut=StatutLocataire.ACTIF
+            statut=StatutLocataire.ACTIF,
+            commentaires="Client fidèle depuis 2020"
         )
         locataire2 = Locataire(
-            immeuble_id=immeuble1.id,
             nom="Fatma Trabelsi",
             telephone="+216 55 987 654",
             email="fatma.trabelsi@email.com",
             cin="98765432",
             raison_sociale="Agence de Voyage",
-            statut=StatutLocataire.ACTIF
+            statut=StatutLocataire.ACTIF,
+            commentaires="Agence recommandée par un partenaire"
         )
         session.add_all([locataire1, locataire2])
         session.flush()

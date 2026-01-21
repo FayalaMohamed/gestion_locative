@@ -1,5 +1,6 @@
 """Database connection and session management module"""
 import os
+from pathlib import Path
 from contextlib import contextmanager
 from typing import Generator, Optional
 
@@ -31,7 +32,7 @@ class Database:
         config = Config.get_instance()
         db_config = config.get('database') or {}
         
-        db_path = db_config.get('path', 'data/gestion_locative.db')
+        db_path = str(Path(db_config.get('path', 'data/gestion_locative.db'))).replace('\\','/')
         
         # Create parent directory if needed
         db_dir = os.path.dirname(db_path)
@@ -39,7 +40,7 @@ class Database:
             os.makedirs(db_dir, exist_ok=True)
         
         # SQLite connection URL
-        database_url = f"sqlite:///{db_path}"
+        database_url = f"sqlite+pysqlite:///{db_path}"
         
         # Create engine
         self._engine = create_engine(
