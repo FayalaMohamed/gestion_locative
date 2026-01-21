@@ -27,7 +27,7 @@ class ImmeubleView(BaseView):
         header_layout.addStretch()
         
         self.btn_refresh = QPushButton("Actualiser")
-        self.btn_refresh.setObjectName("secondary_button")
+        self.btn_refresh.setStyleSheet("background-color: #ecf0f1; padding: 8px 16px; border: 1px solid #bdc3c7; border-radius: 4px;")
         header_layout.addWidget(self.btn_refresh)
         
         self.layout().addLayout(header_layout)
@@ -46,8 +46,8 @@ class ImmeubleView(BaseView):
         table_layout = QVBoxLayout()
         
         self.table = QTableWidget()
-        self.table.setColumnCount(6)
-        self.table.setHorizontalHeaderLabels(["ID", "Nom", "Adresse", "Bureaux", "Notes", "Actions"])
+        self.table.setColumnCount(5)
+        self.table.setHorizontalHeaderLabels(["ID", "Nom", "Adresse", "Bureaux", "Notes"])
         self.table.horizontalHeader().setStretchLastSection(True)
         self.table.setAlternatingRowColors(True)
         self.table.setShowGrid(False)
@@ -108,20 +108,6 @@ class ImmeubleView(BaseView):
                     self.table.setItem(row, 2, QTableWidgetItem(img.adresse or ""))
                     self.table.setItem(row, 3, QTableWidgetItem(str(bureau_count)))
                     self.table.setItem(row, 4, QTableWidgetItem(img.notes or ""))
-                    
-                    btn_widget = QWidget()
-                    btn_layout = QHBoxLayout(btn_widget)
-                    btn_layout.setContentsMargins(0, 0, 0, 0)
-                    btn_layout.setSpacing(5)
-                    
-                    view_btn = QPushButton("Voir")
-                    view_btn.setProperty("row_id", img.id)
-                    view_btn.setProperty("action", "view")
-                    view_btn.setObjectName("action_button")
-                    btn_layout.addWidget(view_btn)
-                    
-                    btn_widget.setLayout(btn_layout)
-                    self.table.setCellWidget(row, 5, btn_widget)
                     
                     for col in range(5):
                         self.table.item(row, col).setFlags(

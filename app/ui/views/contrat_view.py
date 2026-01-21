@@ -30,7 +30,7 @@ class ContratView(BaseView):
         header_layout.addStretch()
         
         self.btn_refresh = QPushButton("Actualiser")
-        self.btn_refresh.setObjectName("secondary_button")
+        self.btn_refresh.setStyleSheet("background-color: #ecf0f1; padding: 8px 16px; border: 1px solid #bdc3c7; border-radius: 4px;")
         header_layout.addWidget(self.btn_refresh)
         
         self.layout().addLayout(header_layout)
@@ -77,16 +77,15 @@ class ContratView(BaseView):
         buttons_layout = QHBoxLayout()
         
         self.btn_add = QPushButton("Ajouter")
-        self.btn_add.setObjectName("primary_button")
+        self.btn_add.setStyleSheet("background-color: #3498db; color: white; padding: 8px 16px; border-radius: 4px; border: none;")
         buttons_layout.addWidget(self.btn_add)
         
         self.btn_edit = QPushButton("Modifier")
-        self.btn_edit.setObjectName("secondary_button")
+        self.btn_edit.setStyleSheet("background-color: #ecf0f1; padding: 8px 16px; border: 1px solid #bdc3c7; border-radius: 4px;")
         buttons_layout.addWidget(self.btn_edit)
         
         self.btn_delete = QPushButton("Supprimer")
-        self.btn_delete.setObjectName("secondary_button")
-        self.btn_delete.setStyleSheet("background-color: #e74c3c; color: white; border: none;")
+        self.btn_delete.setStyleSheet("background-color: #e74c3c; color: white; padding: 8px 16px; border-radius: 4px; border: none;")
         buttons_layout.addWidget(self.btn_delete)
         
         left_layout.addLayout(buttons_layout)

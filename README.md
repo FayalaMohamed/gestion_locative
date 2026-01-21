@@ -1,6 +1,6 @@
 # Gestion Locative Pro
 
-Application de gestion immobilière pour entreprise de location de bureaux.
+Application de gestion immobilière pour entreprise de location de bureaux avec interface Qt.
 
 ## Structure du Projet
 
@@ -9,8 +9,6 @@ D:\code\locations\
 ├── app/
 │   ├── __init__.py
 │   ├── init_db.py              # Créer et initialiser la base de données
-│   ├── test_crud.py            # Tests Phase 2 - CRUD complet
-│   ├── query_db.py             # Interroger la base de données
 │   ├── models/
 │   │   ├── __init__.py
 │   │   └── entities.py         # Modèles SQLAlchemy
@@ -19,125 +17,109 @@ D:\code\locations\
 │   │   ├── base.py             # Classe de base Repository
 │   │   ├── immeuble_repository.py
 │   │   ├── bureau_repository.py
-│   │   ├── Locataire_repository.py
+│   │   ├──Locataire_repository.py
 │   │   ├── contrat_repository.py
 │   │   └── paiement_repository.py
 │   ├── database/
 │   │   ├── __init__.py
 │   │   └── connection.py       # Gestion base de données SQLite
+│   ├── ui/
+│   │   ├── __init__.py
+│   │   ├── main_window.py      # Fenêtre principale Qt
+│   │   └── views/
+│   │       ├── base_view.py
+│   │       ├── immeuble_view.py
+│   │       ├── bureau_view.py
+│   │       ├── locataire_view.py
+│   │       ├── contrat_view.py
+│   │       ├── paiement_view.py
+│   │       └── dashboard_view.py
 │   └── utils/
 │       ├── __init__.py
 │       └── config.py           # Configuration YAML
 ├── config.yaml                 # Configuration de l'application
-├── requirements.txt            # Dépendances Python
-└── alembic.ini                 # Configuration migrations
+└── requirements.txt            # Dépendances Python
 ```
+
+## Vues de l'Application
+
+### 1. Immeubles
+- Liste des immeubles avec adresse
+- Ajout/Modification/Suppression
+- Filtrage par nom
+
+### 2. Bureaux
+- Liste des bureaux par immeuble
+- Numéro, étage, surface
+- Affichage automatique des immeubles parents
+- Statut (occupé/libre)
+
+### 3. Locataires
+- Gestion des locataires (SARL, particuliers)
+- Coordonnées (téléphone, email, CIN)
+- Statut (Actif/Historique)
+- Filtrage par statut
+
+### 4. Contrats
+- Contrat multi-bureaux (relation many-to-many)
+- Grille rouge/vert des paiements
+- **Filtre par statut** (Actif/Résilié)
+- **Mois impayés** : nombre de mois non couverts par un loyer
+  - Affichage cliquable pour voir la liste des mois
+
+### 5. Paiements
+- Types : Loyer, Caution, Pas de porte, Autre
+- **Filtre par contrat** affichant :
+  - Nom du locataire
+  - Numéros des bureaux
+- Grille de période (mois début/fin)
+- Génération de reçus (placeholder)
+
+### 6. Tableau de Bord
+- Placeholder (en construction)
 
 ## Prérequis
 
 - Python 3.11+
-- Conda (optionnel mais recommandé)
+- PySide6 (Qt 6)
+- SQLAlchemy
 
 ## Installation
 
 ```bash
-# Créer l'environnement conda
-conda create -n gestion_locative python=3.11 -y
-conda activate gestion_locative
-
-# Installer les dépendances
 pip install -r requirements.txt
-```
-
-## Gestion de la Base de Données
-
-### Emplacement de la base de données
-
-La base de données SQLite est stockée à : `data/gestion_locative.db`
-
-### Supprimer et recréer la base de données
-
-```bash
-# 1. Supprimer l'ancienne base
-rm data/gestion_locative.db
-
-# 2. Créer une nouvelle base vide
-python "D:\code\locations\app\init_db.py"
-
-# 3. OU créer avec les données d'exemple (recommandé pour tester)
-python "D:\code\locations\app\init_db.py" --seed
-```
-
-### Que contient `--seed` ?
-
-Les données d'exemple incluent :
-
-- **4 Immeubles** : Centre Ville, Ariana, Lac, Mutuelleville
-- **12 Bureaux** : Divers numéros et surfaces
-- **2 Locataires Actifs** : SARL Tech et Entreprise Plus
-- **5 Contrats** : Différentes combinaisons bureaux/locataires
-- **20+ Paiements** : Loyers et cautions sur 2024
-
-### Sur Windows (avec PowerShell)
-
-```powershell
-# Supprimer la base
-Remove-Item data\gestion_locative.db -ErrorAction SilentlyContinue
-
-# Recréer avec données
-python "D:\code\locations\app\init_db.py" --seed
-```
-
-### Réinitialiser complètement (cmd)
-
-```cmd
-del data\gestion_locative.db
-python D:\code\locations\app\init_db.py --seed
 ```
 
 ## Utilisation
 
-### 1. Créer et initialiser la base de données
+### Lancer l'application
 
 ```bash
-# Créer la base de données (vide)
+python -m app.main
+```
+
+### Créer la base de données
+
+```bash
+# Base vide
 python "D:\code\locations\app\init_db.py"
 
-# Créer la base de données AVEC données exemple
+# Base avec données d'exemple
 python "D:\code\locations\app\init_db.py" --seed
 ```
 
-**Résultat :** `data/gestion_locative.db`
+### Sur Windows
 
-### 2. Interroger la base de données
+```powershell
+# Supprimer et recréer avec données
+Remove-Item data\gestion_locative.db -ErrorAction SilentlyContinue
+python "D:\code\locations\app\init_db.py" --seed
 
-```bash
-python "D:\code\locations\query_db.py"
+# Lancer l'application
+python -m app.main
 ```
 
-Affiche :
-- Liste des immeubles
-- Liste des locataires
-- Liste des contrats avec leurs bureaux
-- Liste des paiements
-
-### 3. Lancer les tests Phase 2 (CRUD)
-
-```bash
-python "D:\code\locations\app\test_crud.py"
-```
-
-Teste toutes les opérations CRUD :
-- Immeuble : Create, Read, Update, Search
-- Bureau : Create, Read, Update disponibilité, List par immeuble
-- Locataire : Create, Read, Update, Activate/Deactivate, Search
-- Contrat : Create avec validation, Résiliation, Ajouter/Retirer bureaux
-- Paiement : Create loyer/caution, Total payé, Mois impayés
-- Grille : Calcul rouge/vert
-
-## Architecture
-
-### Modèle de Données (Many-to-Many)
+## Modèle de Données
 
 ```
 Immeuble (1) ----> (N) Bureau (N) <---- (M) Contrat
@@ -146,98 +128,25 @@ Immeuble (1) ----> (N) Bureau (N) <---- (M) Contrat
                            (contrat_bureau)
 
 Locataire (1) ----> (N) Contrat (1) ----> (N) Paiement
-                            |
-                            v
-                         Recu
+                              |
+                              v
+                           Recu
 ```
 
-### Modèle Contrat
+## Fonctionnalités Implémentées
 
-Un contrat peut包含 **plusieurs bureaux** (relation many-to-many).
-
-```python
-# Exemple : Un contrat pour 3 bureaux
-contrat = Contrat(
-    Locataire_id=1,
-    montant_mensuel=7500.000,  # Total pour tous les bureaux
-    bureaux=[bureau101, bureau102, bureau103]
-)
-```
-
-### Modèle Paiement
-
-Les paiements sont liés au contrat (pas au bureau individually).
-
-```python
-# Paiement loyer couvrant 3 mois
-paiement = Paiement(
-    Locataire_id=1,
-    contrat_id=1,
-    type_paiement=TypePaiement.LOYER,
-    montant_total=7500.000,
-    date_paiement=date(2024, 1, 1),
-    date_debut_periode=date(2024, 1, 1),
-    date_fin_periode=date(2024, 3, 31)
-)
-```
-
-### Grille Rouge/Vert
-
-Calculée dynamiquement depuis les paiements :
-
-```
-2024:
-Mois:      Jan  Fev  Mar  Avr  Mai  Jui  Jui  Aou  Sep  Oct  Nov  Dec
-Statut:    VER  VER  VER  ROU  ROU  VER  VER  VER  ROU  ROU  ROU  ROU
-```
-
-- **VER** (Vert) = Mois payé
-- **ROU** (Rouge) = Mois impayé
-
-## Commandes SQL Utilisées
-
-### Créer la base
-```python
-from app.database.connection import init_database
-db = init_database()
-```
-
-### Requêtes simples
-```python
-from app.repositories import ImmeubleRepository
-
-db = init_database()
-repo = ImmeubleRepository(db.session)
-
-# Lire tous
-immeubles = repo.get_all()
-
-# Lire par ID
-immeuble = repo.get_by_id(1)
-
-# Rechercher
-resultats = repo.search("Centre")
-
-# Filtrer
-actifs = repo.get_actifs()
-```
-
-## Phases de Développement
-
-| Phase | Status | Description |
-|-------|--------|-------------|
-| Phase 1 | ✅ Terminée | Modélisation & Base de données |
-| Phase 2 | ✅ Terminée | CRUD Métiers |
-| Phase 3 | ⏳ À faire | CRUD Paiements |
-| Phase 4 | ⏳ À faire | Grille Rouge/Vert (UI) |
-| Phase 5 | ⏳ À faire | Génération Reçus PDF |
-| Phase 6 | ⏳ À faire | Export JSON/CSV |
-| Phase 7 | ⏳ À faire | Interface Qt |
-| Phase 8 | ⏳ À faire | Finitions & Déploiement |
+- ✅ CRUD complet Immeubles, Bureaux, Locataires, Contrats, Paiements
+- ✅ Relation many-to-many Contrats-Bureaux
+- ✅ Grille rouge/vert des paiements
+- ✅ Filtrage dans toutes les vues
+- ✅ Calcul automatique des mois impayés
+- ✅ Interface Qt avec PySide6
+- ⏳ Tableau de bord (en construction)
+- ⏳ Génération PDF des reçus
 
 ## Configuration
 
-Modifier `config.yaml` pour adapter l'application :
+Modifier `config.yaml` :
 
 ```yaml
 app:
@@ -246,40 +155,6 @@ app:
 
 database:
   path: "data/gestion_locative.db"
-
-export:
-  default_format: "json"
-  backup_directory: "backups"
-
-receipts:
-  company_name: "Gestion Immobilière"
-  company_address: ""
-  company_phone: ""
-```
-
-## Dépannage
-
-### Erreur "ModuleNotFoundError"
-```bash
-# Vérifier l'installation des dépendances
-pip install -r requirements.txt
-```
-
-### Erreur "FOREIGN KEY constraint failed"
-
-Cette erreur se produit quand vous essayez de supprimer un enregistrement qui a des dépendances.
-
-**Solution :** Supprimez d'abord les enregistrements liés, puis celle-ci.
-
-**Ou réinitialisez complètement la base :**
-```bash
-rm data/gestion_locative.db
-python "D:\code\locations\app\init_db.py" --seed
-```
-
-### Activer l'environnement conda
-```bash
-conda activate gestion_locative
 ```
 
 ## Licence
