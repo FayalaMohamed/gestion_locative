@@ -135,22 +135,28 @@ class BackupService:
 
             Path(backup_dir).mkdir(parents=True, exist_ok=True)
 
-            data = self.data_service.export_all()
             timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-            filename = f"gestion_locative_backup_{timestamp}.json"
-            file_path = os.path.join(backup_dir, filename)
+            backup_folder_name = f"gestion_locative_backup_{timestamp}"
+            backup_folder = os.path.join(backup_dir, backup_folder_name)
+            os.makedirs(backup_folder, exist_ok=True)
 
-            with open(file_path, 'w', encoding='utf-8') as f:
+            data = self.data_service.export_all(backup_folder=backup_folder)
+            json_file_path = os.path.join(backup_folder, "data.json")
+
+            with open(json_file_path, 'w', encoding='utf-8') as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
 
-            file_size = os.path.getsize(file_path)
-            logger.info(f"Local backup completed: {file_path}")
+            documents_backup_folder = os.path.join(backup_folder, "documents")
+            if os.path.exists(documents_backup_folder) and os.listdir(documents_backup_folder):
+                documents_count = sum([len(files) for r, d, files in os.walk(documents_backup_folder)])
+                logger.info(f"Local backup completed: {backup_folder} ({documents_count} documents included)")
+            else:
+                logger.info(f"Local backup completed: {backup_folder}")
 
             return {
                 'success': True,
-                'file_path': file_path,
-                'file_name': filename,
-                'file_size': file_size,
+                'folder_path': backup_folder,
+                'file_name': "data.json",
                 'backup_date': datetime.utcnow().isoformat()
             }
 
@@ -197,25 +203,30 @@ class BackupService:
 
             self.data_service.import_all(data)
 
-            logger.info("Restore completed successfully")
-            return True, "Database restored successfully from Google Drive"
+            logger.info("Restore completed successfully. Note: Document files are not included in Google Drive backups. Use local backups for complete restore.")
+            return True, "Database restored successfully from Google Drive. Note: Document files need to be restored separately from a local backup."
 
         except Exception as e:
             logger.error(f"Restore failed: {e}")
             return False, f"Restore failed: {str(e)}"
 
-    def restore_from_local(self, file_path: str) -> Tuple[bool, str]:
-        """Restore database from a local backup file"""
+    def restore_from_local(self, folder_path: str) -> Tuple[bool, str]:
+        """Restore database from a local backup folder"""
         try:
-            logger.info(f"Restoring from local backup: {file_path}")
+            logger.info(f"Restoring from local backup: {folder_path}")
 
-            with open(file_path, 'r', encoding='utf-8') as f:
+            json_file_path = os.path.join(folder_path, "data.json")
+            if not os.path.exists(json_file_path):
+                return False, f"Backup file not found: {json_file_path}"
+
+            with open(json_file_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
 
-            self.data_service.import_all(data)
+            documents_backup_folder = os.path.join(folder_path, "documents")
+            self.data_service.import_all(data, documents_backup_folder=documents_backup_folder if os.path.exists(documents_backup_folder) else None)
 
             logger.info("Restore completed successfully")
-            return True, "Database restored successfully from local file"
+            return True, "Database restored successfully from local backup"
 
         except Exception as e:
             logger.error(f"Restore failed: {e}")
