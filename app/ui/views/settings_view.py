@@ -15,6 +15,7 @@ from PySide6.QtCore import Qt, QTimer
 
 from app.ui.views.base_view import BaseView
 from app.services.data_service import DataService
+from app.utils.config import Config
 
 
 class SettingsView(BaseView):
@@ -58,27 +59,33 @@ class SettingsView(BaseView):
         import_group.setLayout(import_layout)
         self.layout().addWidget(import_group)
 
-        progress_group = QGroupBox("Progression")
-        progress_layout = QVBoxLayout()
+        signature_group = QGroupBox("Signature sur les reçus")
+        signature_layout = QFormLayout()
 
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setRange(0, 100)
-        self.progress_bar.setValue(0)
-        self.progress_bar.setVisible(False)
-        progress_layout.addWidget(self.progress_bar)
+        self.btn_import_signature = QPushButton("Importer une signature...")
+        self.btn_import_signature.setStyleSheet("background-color: #9b59b6; color: white; padding: 12px 24px; border-radius: 4px; border: none;")
+        signature_layout.addRow("", self.btn_import_signature)
 
-        self.status_label = QLabel("")
-        self.status_label.setAlignment(Qt.AlignCenter)
-        progress_layout.addWidget(self.status_label)
+        self.signature_path_label = QLabel("Aucune signature importée")
+        self.signature_path_label.setStyleSheet("color: #7f8c8d; font-size: 13px;")
+        signature_layout.addRow("", self.signature_path_label)
 
-        progress_group.setLayout(progress_layout)
-        self.layout().addWidget(progress_group)
+        self.btn_clear_signature = QPushButton("Supprimer la signature")
+        self.btn_clear_signature.setStyleSheet("background-color: #e74c3c; color: white; padding: 8px 16px; border-radius: 4px; border: none;")
+        self.btn_clear_signature.setEnabled(False)
+        signature_layout.addRow("", self.btn_clear_signature)
+
+        signature_group.setLayout(signature_layout)
+        self.layout().addWidget(signature_group)
 
         self.layout().addStretch()
 
     def setup_connections(self):
         self.btn_export.clicked.connect(self.on_export)
         self.btn_import.clicked.connect(self.on_import)
+        self.btn_import_signature.clicked.connect(self.on_import_signature)
+        self.btn_clear_signature.clicked.connect(self.on_clear_signature)
+        self._load_signature_status()
 
     def on_export(self):
         file_path, _ = QFileDialog.getSaveFileName(
@@ -91,11 +98,7 @@ class SettingsView(BaseView):
         if not file_path:
             return
 
-        self.progress_bar.setVisible(True)
-        self.progress_bar.setValue(0)
-        self.status_label.setText("Exportation en cours...")
-
-        QTimer.singleShot(100, lambda: self._do_export(file_path))
+        self._do_export(file_path)
 
     def _do_export(self, file_path: str):
         try:
@@ -105,23 +108,19 @@ class SettingsView(BaseView):
             with open(file_path, 'w', encoding='utf-8') as f:
                 json.dump(data, f, ensure_ascii=False, indent=2, default=str)
 
-            self.progress_bar.setValue(100)
-            self.status_label.setText("Exportation terminée!")
-
             QMessageBox.information(
                 self,
                 "Succès",
                 f"Données exportées avec succès vers:\n{file_path}"
             )
         except Exception as e:
-            self.status_label.setText("Erreur lors de l'exportation")
             QMessageBox.critical(
                 self,
                 "Erreur",
                 f"Erreur lors de l'exportation:\n{str(e)}"
             )
         finally:
-            self.progress_bar.setVisible(False)
+            pass
 
     def on_import(self):
         reply = QMessageBox.warning(
@@ -145,11 +144,7 @@ class SettingsView(BaseView):
         if not file_path:
             return
 
-        self.progress_bar.setVisible(True)
-        self.progress_bar.setValue(0)
-        self.status_label.setText("Importation en cours...")
-
-        QTimer.singleShot(100, lambda: self._do_import(file_path))
+        self._do_import(file_path)
 
     def _do_import(self, file_path: str):
         try:
@@ -158,9 +153,6 @@ class SettingsView(BaseView):
 
             data_service = DataService()
             data_service.import_all(data)
-
-            self.progress_bar.setValue(100)
-            self.status_label.setText("Importation terminée!")
 
             QMessageBox.information(
                 self,
@@ -172,18 +164,67 @@ class SettingsView(BaseView):
             if self.parent_window:
                 self.parent_window.views.get("dashboard").load_data()
         except json.JSONDecodeError as e:
-            self.status_label.setText("Erreur: fichier JSON invalide")
-            QMessageBox.critical(
-                self,
-                "Erreur",
-                f"Fichier JSON invalide:\n{str(e)}"
-            )
-        except Exception as e:
-            self.status_label.setText("Erreur lors de l'importation")
             QMessageBox.critical(
                 self,
                 "Erreur",
                 f"Erreur lors de l'importation:\n{str(e)}"
             )
-        finally:
-            self.progress_bar.setVisible(False)
+
+    def _load_signature_status(self):
+        import os
+        config = Config.get_instance()
+        signature_path = config.get('receipts', 'signature_path', default='')
+        if signature_path and os.path.exists(signature_path):
+            self.signature_path_label.setText(signature_path)
+            self.signature_path_label.setStyleSheet("color: #27ae60; font-size: 13px;")
+            self.btn_clear_signature.setEnabled(True)
+        else:
+            self.signature_path_label.setText("Aucune signature importée")
+            self.signature_path_label.setStyleSheet("color: #7f8c8d; font-size: 13px;")
+            self.btn_clear_signature.setEnabled(False)
+
+    def on_import_signature(self):
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Importer une signature",
+            "",
+            "Images (*.png *.jpg *.jpeg *.bmp)"
+        )
+
+        if not file_path:
+            return
+
+        config = Config.get_instance()
+        config.set(file_path, 'receipts', 'signature_path')
+        config.save_config()
+
+        self._load_signature_status()
+
+        QMessageBox.information(
+            self,
+            "Succès",
+            "Signature importée avec succès!\nElle sera affichée sur les nouveaux reçus."
+        )
+
+    def on_clear_signature(self):
+        reply = QMessageBox.question(
+            self,
+            "Confirmation",
+            "Êtes-vous sûr de vouloir supprimer la signature?",
+            QMessageBox.Yes | QMessageBox.No
+        )
+
+        if reply != QMessageBox.Yes:
+            return
+
+        config = Config.get_instance()
+        config.set('', 'receipts', 'signature_path')
+        config.save_config()
+
+        self._load_signature_status()
+
+        QMessageBox.information(
+            self,
+            "Succès",
+            "Signature supprimée avec succès."
+        )

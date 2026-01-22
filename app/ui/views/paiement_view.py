@@ -3,6 +3,7 @@
 Paiement management view
 """
 import calendar
+import os
 from datetime import date
 
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
@@ -15,6 +16,7 @@ from PySide6.QtGui import QFont, QColor
 
 from app.ui.views.base_view import BaseView
 from app.services.receipt_service import ReceiptService
+from app.services.audit_service import AuditService
 
 
 class PaiementView(BaseView):
@@ -280,13 +282,14 @@ class PaiementView(BaseView):
                 file_path, _ = QFileDialog.getSaveFileName(
                     self,
                     "Enregistrer le reçu PDF",
-                    f"recu_{receipt_number}.pdf",
+                    os.path.join(os.path.expanduser("~"), "Downloads", f"recu_{receipt_number}.pdf"),
                     "Fichiers PDF (*.pdf)"
                 )
 
                 if file_path:
                     with open(file_path, 'wb') as f:
                         f.write(pdf_content)
+                    AuditService.log_receipt(session, paiement_id, receipt_number, file_path)
                     QMessageBox.information(
                         self,
                         "Succès",

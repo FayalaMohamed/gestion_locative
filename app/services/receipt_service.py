@@ -7,7 +7,7 @@ from typing import Tuple
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.lib.units import mm
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image, Flowable
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT
 from sqlalchemy.orm import Session
@@ -154,8 +154,22 @@ class ReceiptService:
 
         elements.append(Spacer(1, 20*mm))
         elements.append(Paragraph("Signature:", styles['Normal']))
-        elements.append(Spacer(1, 15*mm))
-        elements.append(Paragraph("__________________________", styles['Normal']))
+        elements.append(Spacer(1, 5*mm))
+
+        signature_path = self.config.get('receipts', 'signature_path', default='')
+        if signature_path:
+            try:
+                from pathlib import Path
+                if Path(signature_path).exists():
+                    signature_img = Image(signature_path, width=60*mm, height=30*mm)
+                    signature_img.hAlign = 'LEFT'
+                    elements.append(signature_img)
+                else:
+                    elements.append(Paragraph("__________________________", styles['Normal']))
+            except Exception:
+                elements.append(Paragraph("__________________________", styles['Normal']))
+        else:
+            elements.append(Paragraph("__________________________", styles['Normal']))
 
         doc.build(elements)
         buffer.seek(0)

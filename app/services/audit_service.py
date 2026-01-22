@@ -63,6 +63,20 @@ class AuditService:
         return audit
 
     @staticmethod
+    def log_receipt(session: Session, paiement_id: int, receipt_number: str, file_path: str = None) -> AuditLog:
+        """Log receipt generation"""
+        audit = AuditLog(
+            table_nom="paiement",
+            entite_id=paiement_id,
+            action="RECEIPT_GENERATED",
+            donnees_avant=None,
+            donnees_apres={"receipt_number": receipt_number, "file_path": file_path},
+            created_at=datetime.utcnow()
+        )
+        session.add(audit)
+        return audit
+
+    @staticmethod
     def entity_to_dict(entity) -> Optional[Dict[str, Any]]:
         """Convert an entity to a JSON-compatible dictionary"""
         if entity is None:
