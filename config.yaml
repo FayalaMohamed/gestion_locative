@@ -8,6 +8,8 @@ database:
 export:
   backup_directory: D:\code\locations\backups
   default_format: json
+google_drive:
+  backup_folder_name: Gestion Locative Pro Backups
 logging:
   file: D:\code\locations\logs\app.log
   format: '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
