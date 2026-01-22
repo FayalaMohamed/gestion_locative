@@ -3,6 +3,7 @@
 Settings view for data management (export/import)
 """
 import json
+import os
 from datetime import datetime
 from typing import Any, Dict, Optional
 
@@ -35,11 +36,11 @@ class SettingsView(BaseView):
         export_group = QGroupBox("Exportation des données")
         export_layout = QFormLayout()
 
-        self.btn_export = QPushButton("Exporter tout en JSON...")
+        self.btn_export = QPushButton("Exporter tout (données + documents)...")
         self.btn_export.setStyleSheet("background-color: #3498db; color: white; padding: 12px 24px; border-radius: 4px; border: none;")
         export_layout.addRow("", self.btn_export)
 
-        self.export_info = QLabel("Exporte toutes les données de l'application vers un fichier JSON")
+        self.export_info = QLabel("Exporte toutes les données et documents vers un dossier de sauvegarde")
         self.export_info.setStyleSheet("color: #7f8c8d; font-size: 13px;")
         export_layout.addRow("", self.export_info)
 
@@ -49,11 +50,11 @@ class SettingsView(BaseView):
         import_group = QGroupBox("Importation des données")
         import_layout = QFormLayout()
 
-        self.btn_import = QPushButton("Importer depuis JSON...")
+        self.btn_import = QPushButton("Importer depuis un dossier de sauvegarde...")
         self.btn_import.setStyleSheet("background-color: #27ae60; color: white; padding: 12px 24px; border-radius: 4px; border: none;")
         import_layout.addRow("", self.btn_import)
 
-        self.import_warning = QLabel("Attention: L'importation remplacera toutes les données existantes!")
+        self.import_warning = QLabel("Attention: L'importation remplacera toutes les données existantes (y compris les documents)!")
         self.import_warning.setStyleSheet("color: #e74c3c; font-size: 13px;")
         import_layout.addRow("", self.import_warning)
 
@@ -140,30 +141,38 @@ class SettingsView(BaseView):
         self._update_google_drive_status()
 
     def on_export(self):
-        file_path, _ = QFileDialog.getSaveFileName(
+        folder_path = QFileDialog.getExistingDirectory(
             self,
-            "Exporter les données",
-            f"gestion_locative_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
-            "Fichiers JSON (*.json)"
+            "Sélectionner le dossier de sauvegarde",
+            "",
+            QFileDialog.ShowDirsOnly
         )
 
-        if not file_path:
+        if not folder_path:
             return
 
-        self._do_export(file_path)
+        self._do_export(folder_path)
 
-    def _do_export(self, file_path: str):
+    def _do_export(self, folder_path: str):
         try:
             data_service = DataService()
-            data = data_service.export_all()
 
-            with open(file_path, 'w', encoding='utf-8') as f:
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            backup_folder_name = f"gestion_locative_backup_{timestamp}"
+            backup_folder = os.path.join(folder_path, backup_folder_name)
+            os.makedirs(backup_folder, exist_ok=True)
+
+            data = data_service.export_all(backup_folder=backup_folder)
+
+            json_file_path = os.path.join(backup_folder, "data.json")
+            with open(json_file_path, 'w', encoding='utf-8') as f:
                 json.dump(data, f, ensure_ascii=False, indent=2, default=str)
 
             QMessageBox.information(
                 self,
                 "Succès",
-                f"Données exportées avec succès vers:\n{file_path}"
+                f"Sauvegarde créée avec succès dans:\n{backup_folder}\n\n"
+                f"Le dossier contient:\n- data.json (données de la base de données)\n- documents/ (fichiers joints)"
             )
         except Exception as e:
             QMessageBox.critical(
@@ -186,31 +195,41 @@ class SettingsView(BaseView):
         if reply != QMessageBox.Yes:
             return
 
-        file_path, _ = QFileDialog.getOpenFileName(
+        folder_path = QFileDialog.getExistingDirectory(
             self,
-            "Importer les données",
+            "Sélectionner le dossier de sauvegarde",
             "",
-            "Fichiers JSON (*.json)"
+            QFileDialog.ShowDirsOnly
         )
 
-        if not file_path:
+        if not folder_path:
             return
 
-        self._do_import(file_path)
+        self._do_import(folder_path)
 
-    def _do_import(self, file_path: str):
+    def _do_import(self, folder_path: str):
+        json_file_path = os.path.join(folder_path, "data.json")
+        if not os.path.exists(json_file_path):
+            QMessageBox.critical(
+                self,
+                "Erreur",
+                f"Le fichier data.json n'existe pas dans:\n{folder_path}\n\n"
+                "Veuillez sélectionner un dossier de sauvegarde valide."
+            )
+            return
+
         try:
-            with open(file_path, 'r', encoding='utf-8') as f:
+            with open(json_file_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
 
+            documents_backup_folder = os.path.join(folder_path, "documents")
             data_service = DataService()
-            data_service.import_all(data)
+            data_service.import_all(data, documents_backup_folder=documents_backup_folder if os.path.exists(documents_backup_folder) else None)
 
             QMessageBox.information(
                 self,
                 "Succès",
-                "Données importées avec succès!\n\n"
-                "Veuillez redémarrer l'application pour voir les changements."
+                "Données importées avec succès!"
             )
 
             if self.parent_window:
