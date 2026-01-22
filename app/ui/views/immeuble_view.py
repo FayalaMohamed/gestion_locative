@@ -150,12 +150,14 @@ class ImmeubleView(BaseView):
         if reply == QMessageBox.Yes:
             try:
                 from app.database.connection import get_database
-                from app.models.entities import Immeuble, Bureau, Contrat
+                from app.models.entities import Bureau
+                from app.repositories.immeuble_repository import ImmeubleRepository
                 from sqlalchemy import func
                 
                 db = get_database()
                 with db.session_scope() as session:
-                    img = session.query(Immeuble).get(item_id)
+                    repo = ImmeubleRepository(session)
+                    img = repo.get_by_id(item_id)
                     if img:
                         bureau_count = session.query(func.count(Bureau.id)).filter(Bureau.immeuble_id == item_id).scalar()
                         
@@ -163,8 +165,8 @@ class ImmeubleView(BaseView):
                             QMessageBox.warning(self, "Suppression impossible", 
                                 f"Cet immeuble contient {bureau_count} bureau(x). Supprimez d'abord les bureaux associés.")
                             return
-                            
-                        session.delete(img)
+                        
+                        repo.delete(img)
                     self.load_data()
                     self.data_changed.emit()
             except Exception as e:
@@ -253,22 +255,25 @@ class ImmeubleDialog(QDialog):
         try:
             from app.database.connection import get_database
             from app.models.entities import Immeuble
+            from app.repositories.immeuble_repository import ImmeubleRepository
             
             db = get_database()
             with db.session_scope() as session:
+                repo = ImmeubleRepository(session)
                 if self.immeuble_id:
-                    img = session.query(Immeuble).get(self.immeuble_id)
+                    img = repo.get_by_id(self.immeuble_id)
                     if img:
-                        img.nom = nom
-                        img.adresse = self.adresse_edit.text().strip() or None
-                        img.notes = self.notes_edit.toPlainText().strip() or None
+                        repo.update(img,
+                            nom=nom,
+                            adresse=self.adresse_edit.text().strip() or None,
+                            notes=self.notes_edit.toPlainText().strip() or None
+                        )
                 else:
-                    img = Immeuble(
+                    repo.create(
                         nom=nom,
                         adresse=self.adresse_edit.text().strip() or None,
                         notes=self.notes_edit.toPlainText().strip() or None
                     )
-                    session.add(img)
                     
                 self.accept()
                 

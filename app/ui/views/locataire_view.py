@@ -171,11 +171,13 @@ class LocataireView(BaseView):
             try:
                 from app.database.connection import get_database
                 from app.models.entities import Locataire, Contrat, Paiement
+                from app.repositories.locataire_repository import LocataireRepository
                 from sqlalchemy import func
                 
                 db = get_database()
                 with db.session_scope() as session:
-                    loc = session.query(Locataire).get(item_id)
+                    repo = LocataireRepository(session)
+                    loc = repo.get_by_id(item_id)
                     if loc:
                         contrat_count = session.query(func.count(Contrat.id)).filter(Contrat.Locataire_id == item_id).scalar()
                         if contrat_count > 0:
@@ -189,7 +191,7 @@ class LocataireView(BaseView):
                                 f"Ce locataire a {paiement_count} paiement(s). Supprimez d'abord les paiements associés.")
                             return
                         
-                        session.delete(loc)
+                        repo.delete(loc)
                 self.load_data()
                 self.data_changed.emit()
                 self.data_changed.emit()
@@ -290,18 +292,22 @@ class LocataireDialog(QDialog):
         try:
             from app.database.connection import get_database
             from app.models.entities import Locataire, StatutLocataire
+            from app.repositories.locataire_repository import LocataireRepository
             
             db = get_database()
             with db.session_scope() as session:
+                repo = LocataireRepository(session)
                 if self.locataire_id:
-                    loc = session.query(Locataire).get(self.locataire_id)
+                    loc = repo.get_by_id(self.locataire_id)
                     if loc:
-                        loc.nom = nom
-                        loc.telephone = self.telephone_edit.text().strip() or None
-                        loc.email = self.email_edit.text().strip() or None
-                        loc.cin = self.cin_edit.text().strip() or None
-                        loc.raison_sociale = self.raison_sociale_edit.text().strip() or None
-                        loc.commentaires = self.notes_edit.toPlainText().strip() or None
+                        repo.update(loc,
+                            nom=nom,
+                            telephone=self.telephone_edit.text().strip() or None,
+                            email=self.email_edit.text().strip() or None,
+                            cin=self.cin_edit.text().strip() or None,
+                            raison_sociale=self.raison_sociale_edit.text().strip() or None,
+                            commentaires=self.notes_edit.toPlainText().strip() or None
+                        )
                         
                         active_contrats = session.query(Locataire).filter(
                             Locataire.id == self.locataire_id,
@@ -309,7 +315,7 @@ class LocataireDialog(QDialog):
                         ).count()
                         loc.statut = StatutLocataire.ACTIF if active_contrats > 0 else StatutLocataire.HISTORIQUE
                 else:
-                    loc = Locataire(
+                    repo.create(
                         nom=nom,
                         telephone=self.telephone_edit.text().strip() or None,
                         email=self.email_edit.text().strip() or None,
@@ -318,7 +324,6 @@ class LocataireDialog(QDialog):
                         statut=StatutLocataire.ACTIF,
                         commentaires=self.notes_edit.toPlainText().strip() or None
                     )
-                    session.add(loc)
                     
                 self.accept()
                 
@@ -334,19 +339,23 @@ class LocataireDialog(QDialog):
             
         try:
             from app.database.connection import get_database
-            from app.models.entities import Locataire, StatutLocataire
+            from app.models.entities import Locataire, StatutLocataire, Contrat
+            from app.repositories.locataire_repository import LocataireRepository
             
             db = get_database()
             with db.session_scope() as session:
+                repo = LocataireRepository(session)
                 if self.locataire_id:
-                    loc = session.query(Locataire).get(self.locataire_id)
+                    loc = repo.get_by_id(self.locataire_id)
                     if loc:
-                        loc.nom = nom
-                        loc.telephone = self.telephone_edit.text().strip() or None
-                        loc.email = self.email_edit.text().strip() or None
-                        loc.cin = self.cin_edit.text().strip() or None
-                        loc.raison_sociale = self.raison_sociale_edit.text().strip() or None
-                        loc.commentaires = self.notes_edit.toPlainText().strip() or None
+                        repo.update(loc,
+                            nom=nom,
+                            telephone=self.telephone_edit.text().strip() or None,
+                            email=self.email_edit.text().strip() or None,
+                            cin=self.cin_edit.text().strip() or None,
+                            raison_sociale=self.raison_sociale_edit.text().strip() or None,
+                            commentaires=self.notes_edit.toPlainText().strip() or None
+                        )
                         
                         active_contrats = session.query(Contrat).filter(
                             Contrat.Locataire_id == self.locataire_id,
@@ -354,7 +363,7 @@ class LocataireDialog(QDialog):
                         ).count()
                         loc.statut = StatutLocataire.ACTIF if active_contrats > 0 else StatutLocataire.HISTORIQUE
                 else:
-                    loc = Locataire(
+                    repo.create(
                         nom=nom,
                         telephone=self.telephone_edit.text().strip() or None,
                         email=self.email_edit.text().strip() or None,
@@ -363,7 +372,6 @@ class LocataireDialog(QDialog):
                         statut=StatutLocataire.ACTIF,
                         commentaires=self.notes_edit.toPlainText().strip() or None
                     )
-                    session.add(loc)
                     
                 self.accept()
                 

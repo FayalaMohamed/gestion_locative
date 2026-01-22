@@ -20,6 +20,7 @@ from app.ui.views.bureau_view import BureauView
 from app.ui.views.locataire_view import LocataireView
 from app.ui.views.contrat_view import ContratView
 from app.ui.views.paiement_view import PaiementView
+from app.ui.views.audit_view import AuditView
 from app.ui.views.settings_view import SettingsView
 
 
@@ -54,7 +55,7 @@ class MainWindow(QMainWindow):
             }
         """)
         
-        for name in ["Tableau de Bord", "Immeubles", "Bureaux", "Locataires", "Contrats", "Paiements", "Paramètres"]:
+        for name in ["Tableau de Bord", "Immeubles", "Bureaux", "Locataires", "Contrats", "Paiements", "Historique", "Paramètres"]:
             item = QListWidgetItem(name)
             self.sidebar.addItem(item)
             
@@ -70,6 +71,7 @@ class MainWindow(QMainWindow):
         self.content.addWidget(LocataireView())
         self.content.addWidget(ContratView())
         self.content.addWidget(PaiementView())
+        self.content.addWidget(AuditView())
         self.content.addWidget(SettingsView())
         
         self.sidebar.currentRowChanged.connect(self.content.setCurrentIndex)

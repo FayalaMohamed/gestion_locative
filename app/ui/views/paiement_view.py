@@ -253,12 +253,14 @@ class PaiementView(BaseView):
             try:
                 from app.database.connection import get_database
                 from app.models.entities import Paiement
+                from app.repositories.paiement_repository import PaiementRepository
                 
                 db = get_database()
                 with db.session_scope() as session:
-                    p = session.query(Paiement).get(item_id)
+                    repo = PaiementRepository(session)
+                    p = repo.get_by_id(item_id)
                     if p:
-                        session.delete(p)
+                        repo.delete(p)
                 self.load_data()
                 self.data_changed.emit()
             except Exception as e:
@@ -544,53 +546,59 @@ class PaiementDialog(QDialog):
         try:
             from app.database.connection import get_database
             from app.models.entities import Paiement
+            from app.repositories.paiement_repository import PaiementRepository
             
             db = get_database()
             with db.session_scope() as session:
+                repo = PaiementRepository(session)
                 if self.paiement_id:
-                    p = session.query(Paiement).get(self.paiement_id)
+                    p = repo.get_by_id(self.paiement_id)
                     if p:
-                        p.Locataire_id = loc_id
-                        p.contrat_id = contrat_id
-                        p.type_paiement = type_paiement
-                        p.montant_total = montant
-                        p.date_paiement = self.date_paiement.date().toPython()
-                        
+                        date_debut = None
+                        date_fin = None
                         if type_paiement == TypePaiement.LOYER:
                             mois_debut = self.mois_debut_combo.currentData()
                             annee_debut = self.annee_debut_spin.value()
-                            p.date_debut_periode = date(annee_debut, mois_debut, 1)
+                            date_debut = date(annee_debut, mois_debut, 1)
                             
                             mois_fin = self.mois_fin_combo.currentData()
                             annee_fin = self.annee_fin_spin.value()
                             last_day = calendar.monthrange(annee_fin, mois_fin)[1]
-                            p.date_fin_periode = date(annee_fin, mois_fin, last_day)
-                        else:
-                            p.date_debut_periode = None
-                            p.date_fin_periode = None
-                            
-                        p.commentaire = self.commentaire_edit.toPlainText().strip() or None
+                            date_fin = date(annee_fin, mois_fin, last_day)
+                        
+                        repo.update(p,
+                            Locataire_id=loc_id,
+                            contrat_id=contrat_id,
+                            type_paiement=type_paiement,
+                            montant_total=montant,
+                            date_paiement=self.date_paiement.date().toPython(),
+                            date_debut_periode=date_debut,
+                            date_fin_periode=date_fin,
+                            commentaire=self.commentaire_edit.toPlainText().strip() or None
+                        )
                 else:
-                    p = Paiement(
+                    date_debut = None
+                    date_fin = None
+                    if type_paiement == TypePaiement.LOYER:
+                        mois_debut = self.mois_debut_combo.currentData()
+                        annee_debut = self.annee_debut_spin.value()
+                        date_debut = date(annee_debut, mois_debut, 1)
+                        
+                        mois_fin = self.mois_fin_combo.currentData()
+                        annee_fin = self.annee_fin_spin.value()
+                        last_day = calendar.monthrange(annee_fin, mois_fin)[1]
+                        date_fin = date(annee_fin, mois_fin, last_day)
+                    
+                    repo.create(
                         Locataire_id=loc_id,
                         contrat_id=contrat_id,
                         type_paiement=type_paiement,
                         montant_total=montant,
                         date_paiement=self.date_paiement.date().toPython(),
-                        date_debut_periode=None,
-                        date_fin_periode=None,
+                        date_debut_periode=date_debut,
+                        date_fin_periode=date_fin,
                         commentaire=self.commentaire_edit.toPlainText().strip() or None
                     )
-                    if type_paiement == TypePaiement.LOYER:
-                        mois_debut = self.mois_debut_combo.currentData()
-                        annee_debut = self.annee_debut_spin.value()
-                        p.date_debut_periode = date(annee_debut, mois_debut, 1)
-                        
-                        mois_fin = self.mois_fin_combo.currentData()
-                        annee_fin = self.annee_fin_spin.value()
-                        last_day = calendar.monthrange(annee_fin, mois_fin)[1]
-                        p.date_fin_periode = date(annee_fin, mois_fin, last_day)
-                    session.add(p)
                     
                 self.accept()
                 

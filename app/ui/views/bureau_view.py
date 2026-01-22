@@ -171,16 +171,18 @@ class BureauView(QWidget):
             try:
                 from app.database.connection import get_database
                 from app.models.entities import Bureau, Contrat
+                from app.repositories.bureau_repository import BureauRepository
                 db = get_database()
                 with db.session_scope() as session:
-                    bur = session.query(Bureau).get(item_id)
+                    repo = BureauRepository(session)
+                    bur = repo.get_by_id(item_id)
                     if bur:
                         contrat_count = session.query(func.count(Contrat.id)).join(contrat_bureau).filter(contrat_bureau.c.bureau_id == item_id).scalar()
                         if contrat_count > 0:
                             QMessageBox.warning(self, "Suppression impossible", 
                                 "Ce bureau est lié à un ou plusieurs contrats. Résiliez d'abord les contrats associés.")
                             return
-                        session.delete(bur)
+                        repo.delete(bur)
                 self.load_immeubles()
                 self.load_data()
             except Exception as e:
@@ -273,25 +275,28 @@ class BureauDialog(QDialog):
         try:
             from app.database.connection import get_database
             from app.models.entities import Bureau
+            from app.repositories.bureau_repository import BureauRepository
             db = get_database()
             with db.session_scope() as session:
+                repo = BureauRepository(session)
                 if self.bureau_id:
-                    bur = session.query(Bureau).get(self.bureau_id)
+                    bur = repo.get_by_id(self.bureau_id)
                     if bur:
-                        bur.immeuble_id = self.immeuble_combo.currentData()
-                        bur.numero = self.numero_spin.value()
-                        bur.etage = self.etage_edit.text().strip() or None
-                        bur.surface_m2 = self.surface_spin.value()
-                        bur.notes = self.notes_edit.toPlainText().strip() or None
+                        repo.update(bur,
+                            immeuble_id=self.immeuble_combo.currentData(),
+                            numero=self.numero_spin.value(),
+                            etage=self.etage_edit.text().strip() or None,
+                            surface_m2=self.surface_spin.value(),
+                            notes=self.notes_edit.toPlainText().strip() or None
+                        )
                 else:
-                    bur = Bureau(
+                    repo.create(
                         immeuble_id=self.immeuble_combo.currentData(),
                         numero=self.numero_spin.value(),
                         etage=self.etage_edit.text().strip() or None,
                         surface_m2=self.surface_spin.value(),
                         notes=self.notes_edit.toPlainText().strip() or None
                     )
-                    session.add(bur)
                 self.accept()
         except Exception as e:
             QMessageBox.critical(self, "Erreur", str(e))
