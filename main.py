@@ -119,7 +119,9 @@ class MainWindow(QMainWindow):
         self.content.addWidget(SettingsView())
         
         self.sidebar.currentRowChanged.connect(self.content.setCurrentIndex)
+        self.sidebar.currentRowChanged.connect(lambda _: self.sidebar_bottom.setCurrentRow(-1))
         self.sidebar_bottom.currentRowChanged.connect(lambda row: self.content.setCurrentIndex(6 + row))
+        self.sidebar_bottom.currentRowChanged.connect(lambda _: self.sidebar.setCurrentRow(-1))
         
     def refresh_dashboard(self):
         pass
