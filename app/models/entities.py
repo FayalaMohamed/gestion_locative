@@ -183,7 +183,6 @@ class Paiement(Base):
     # Relations
     locataire = relationship("Locataire", back_populates="paiements")
     contrat = relationship("Contrat", back_populates="paiements")
-    recu = relationship("Recu", back_populates="paiement", uselist=False)
 
     def __repr__(self):
         return f"<Paiement(id={self.id}, type={self.type_paiement}, montant={self.montant_total})>"
@@ -211,101 +210,6 @@ class Paiement(Base):
                 current = current.replace(month=current.month + 1, day=1)
         
         return mois_couverts
-
-
-class Recu(Base):
-    __tablename__ = "recus"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    paiement_id = Column(Integer, ForeignKey("paiements.id"), nullable=False, unique=True)
-    
-    # Numéro de reçu
-    numero_recu = Column(String(50), nullable=False, unique=True)
-    
-    # Contenu du reçu
-    contenu = Column(JSON, nullable=True)
-    chemin_fichier = Column(String(500), nullable=True)
-    
-    # Métadonnées
-    date_generation = Column(DateTime, default=datetime.utcnow)
-    genere_automatiquement = Column(Boolean, default=True)
-    notes = Column(Text, nullable=True)
-
-    # Relations
-    paiement = relationship("Paiement", back_populates="recu")
-
-    def __repr__(self):
-        return f"<Recu(id={self.id}, numero='{self.numero_recu}')>"
-
-
-class TemplateRecu(Base):
-    __tablename__ = "templates_recu"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    nom = Column(String(200), nullable=False)
-    est_par_defaut = Column(Boolean, default=False)
-    
-    # Contenu du template
-    contenu_html = Column(Text, nullable=False)
-    
-    # Métadonnées
-    date_creation = Column(DateTime, default=datetime.utcnow)
-    date_modification = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    actif = Column(Boolean, default=True)
-
-    def __repr__(self):
-        return f"<TemplateRecu(id={self.id}, nom='{self.nom}')>"
-
-    @staticmethod
-    def get_default_template() -> str:
-        return """
-<!DOCTYPE html>
-<html>
-<head>
-    <style>
-        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
-        .header { text-align: center; border-bottom: 2px solid #333; padding-bottom: 20px; margin-bottom: 20px; }
-        .company-name { font-size: 24px; font-weight: bold; }
-        .receipt-title { font-size: 20px; color: #666; }
-        .info-section { margin-bottom: 20px; }
-        .info-label { font-weight: bold; color: #333; }
-        .amount { font-size: 18px; font-weight: bold; color: #2e7d32; }
-        .footer { margin-top: 40px; border-top: 1px solid #ccc; padding-top: 20px; text-align: center; font-size: 12px; color: #666; }
-    </style>
-</head>
-<body>
-    <div class="header">
-        <div class="company-name">{{company_name}}</div>
-        <div class="receipt-title">REÇU DE PAIEMENT</div>
-        <div>N° {{numero_recu}}</div>
-    </div>
-    
-    <div class="info-section">
-        <div><span class="info-label">Date:</span> {{date_paiement}}</div>
-        <div><span class="info-label">Locataire:</span> {{nom_locataire}}</div>
-        <div><span class="info-label">Immeuble:</span> {{nom_immeuble}}</div>
-        <div><span class="info-label">Bureaux:</span> {{numeros_bureau}}</div>
-    </div>
-    
-    <div class="info-section">
-        <div><span class="info-label">Type de paiement:</span> {{type_paiement}}</div>
-        {% if periode %}
-        <div><span class="info-label">Période:</span> {{periode}}</div>
-        {% endif %}
-    </div>
-    
-    <div class="info-section">
-        <div class="amount">Montant: {{montant}} TND</div>
-    </div>
-    
-    <div class="footer">
-        <div>Reçu généré le {{date_generation}}</div>
-        <div>{{company_address}}</div>
-        {% if company_phone %}<div>{{company_phone}}</div>{% endif %}
-    </div>
-</body>
-</html>
-        """
 
 
 class AuditLog(Base):

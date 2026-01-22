@@ -17,7 +17,7 @@ from decimal import Decimal
 from app.database.connection import init_database
 from app.models.entities import (
     Immeuble, Bureau, Locataire, Contrat, Paiement,
-    TemplateRecu, TypePaiement, StatutLocataire
+    TypePaiement, StatutLocataire
 )
 
 
@@ -146,62 +146,6 @@ def create_sample_data() -> None:
             commentaire="Loyer Février 2024"
         )
         session.add_all([paiement1, paiement2, paiement3])
-        
-        # Create default receipt template
-        template = TemplateRecu(
-            nom="Template Standard",
-            est_par_defaut=True,
-            contenu_html="""
-<!DOCTYPE html>
-<html>
-<head>
-    <style>
-        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
-        .header { text-align: center; border-bottom: 2px solid #333; padding-bottom: 20px; margin-bottom: 20px; }
-        .company-name { font-size: 24px; font-weight: bold; }
-        .receipt-title { font-size: 20px; color: #666; }
-        .info-section { margin-bottom: 20px; }
-        .info-label { font-weight: bold; color: #333; }
-        .amount { font-size: 18px; font-weight: bold; color: #2e7d32; }
-        .footer { margin-top: 40px; border-top: 1px solid #ccc; padding-top: 20px; text-align: center; font-size: 12px; color: #666; }
-    </style>
-</head>
-<body>
-    <div class="header">
-        <div class="company-name">{{company_name}}</div>
-        <div class="receipt-title">REÇU DE PAIEMENT</div>
-        <div>N° {{numero_recu}}</div>
-    </div>
-    
-    <div class="info-section">
-        <div><span class="info-label">Date:</span> {{date_paiement}}</div>
-        <div><span class="info-label">Locataire:</span> {{nom_locataire}}</div>
-        <div><span class="info-label">Immeuble:</span> {{nom_immeuble}}</div>
-        <div><span class="info-label">Bureau:</span> {{numero_bureau}}</div>
-    </div>
-    
-    <div class="info-section">
-        <div><span class="info-label">Type de paiement:</span> {{type_paiement}}</div>
-        {% if periode %}
-        <div><span class="info-label">Période:</span> {{periode}}</div>
-        {% endif %}
-    </div>
-    
-    <div class="info-section">
-        <div class="amount">Montant: {{montant}} TND</div>
-    </div>
-    
-    <div class="footer">
-        <div>Reçu généré le {{date_generation}}</div>
-        <div>{{company_address}}</div>
-        {% if company_phone %}<div>{{company_phone}}</div>{% endif %}
-    </div>
-</body>
-</html>
-            """,
-            actif=True
-        )
-        session.add(template)
         
         print("Sample data created successfully!")
 

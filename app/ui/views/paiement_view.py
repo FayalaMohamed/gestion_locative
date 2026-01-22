@@ -9,11 +9,12 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                                QPushButton, QTableWidget, QTableWidgetItem,
                                QHeaderView, QLineEdit, QMessageBox, QGroupBox,
                                QFormLayout, QGridLayout, QTextEdit, QComboBox,
-                               QDateEdit, QDoubleSpinBox, QSpinBox)
+                               QDateEdit, QDoubleSpinBox, QSpinBox, QFileDialog)
 from PySide6.QtCore import Qt, Signal, QDate
 from PySide6.QtGui import QFont, QColor
 
 from app.ui.views.base_view import BaseView
+from app.services.receipt_service import ReceiptService
 
 
 class PaiementView(BaseView):
@@ -249,18 +250,12 @@ class PaiementView(BaseView):
         if reply == QMessageBox.Yes:
             try:
                 from app.database.connection import get_database
-                from app.models.entities import Paiement, Recu
-                from sqlalchemy import func
+                from app.models.entities import Paiement
                 
                 db = get_database()
                 with db.session_scope() as session:
                     p = session.query(Paiement).get(item_id)
                     if p:
-                        recu_count = session.query(func.count(Recu.id)).filter(Recu.paiement_id == item_id).scalar()
-                        if recu_count > 0:
-                            QMessageBox.warning(self, "Suppression impossible", 
-                                "Ce paiement a un reçu associé. Supprimez d'abord le reçu.")
-                            return
                         session.delete(p)
                 self.load_data()
                 self.data_changed.emit()
@@ -272,12 +267,37 @@ class PaiementView(BaseView):
         if not selected:
             QMessageBox.warning(self, "Sélection", "Veuillez sélectionner un paiement")
             return
-            
-        item_id = int(self.table.item(selected[0].row(), 0).text())
-        
-        QMessageBox.information(self, "Reçu", 
-                               "La génération de reçu PDF sera implémentée dans une phase ultérieure.\n\n"
-                               "Cela nécessite l'intégration d'une bibliothèque comme reportlab ou fpdf.")
+
+        paiement_id = int(self.table.item(selected[0].row(), 0).text())
+
+        try:
+            from app.database.connection import get_database
+            db = get_database()
+            with db.session_scope() as session:
+                service = ReceiptService(session)
+                pdf_content, receipt_number = service.generate_receipt(paiement_id)
+
+                file_path, _ = QFileDialog.getSaveFileName(
+                    self,
+                    "Enregistrer le reçu PDF",
+                    f"recu_{receipt_number}.pdf",
+                    "Fichiers PDF (*.pdf)"
+                )
+
+                if file_path:
+                    with open(file_path, 'wb') as f:
+                        f.write(pdf_content)
+                    QMessageBox.information(
+                        self,
+                        "Succès",
+                        f"Reçu enregistré avec succès:\n{file_path}"
+                    )
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "Erreur",
+                f"Erreur lors de la génération du reçu:\n{str(e)}"
+            )
             
     def on_search(self, text):
         for row in range(self.table.rowCount()):
