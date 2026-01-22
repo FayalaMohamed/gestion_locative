@@ -244,3 +244,62 @@ receipts:
 ## Licence
 
 Propriétaire - Usage interne
+
+## Création de l'Executable (.exe)
+
+### Prérequis
+
+1. Assurez-vous d'avoir conda installé avec l'environnement `location` activé
+2. Avoir l'icône de l'application dans `app/ui/icon.png`
+
+### Création de l'Executable
+
+```bash
+# Activer l'environnement conda
+conda activate location
+
+# Builder l'executable
+pyinstaller --onefile --windowed --clean gestion_locative.spec
+```
+
+Ou avec conda run :
+
+```bash
+conda run -n location pyinstaller --clean gestion_locative.spec
+```
+
+### Fichiers à Distribuer au Client
+
+Après la compilation, les fichiers suivants doivent être fournis au client :
+
+```
+Dossier de distribution/
+├── GestionLocativePro.exe    # L'executable (100MB)
+├── config.yaml               # Configuration de l'application
+└── data/
+    ├── gestion_locative.db   # Base de données (avec toutes les données)
+    └── google_drive_token.json  # Token Google Drive (si utilisé)
+```
+
+### Structure des Chemins
+
+L'application utilise des chemins relatifs, donc le dossier peut être placé n'importe où sur l'ordinateur du client :
+
+```
+C:\
+└── Program Files\
+    └── GestionLocativePro\
+        ├── GestionLocativePro.exe
+        ├── config.yaml
+        └── data\
+            ├── gestion_locative.db
+            ├── backups\
+            └── google_drive_token.json
+```
+
+### Notes de Distribution
+
+- Le fichier `gestion_locative.db` contient toutes les données (immeubles, bureaux, locataires, contrats, paiements)
+- Si le client change d'ordinateur, copiez simplement le dossier entier
+- Les sauvegardes automatiques iront dans `data/backups/`
+- L'icône de l'application est intégrée dans l'executable

@@ -1,9 +1,9 @@
 app:
   debug: true
 database:
-  path: D:\code\locations\data\gestion_locative.db
+  path: data/gestion_locative.db
 export:
-  backup_directory: D:\code\locations\data\backups
+  backup_directory: data/backups
 receipts:
   company_name: Magic House
-  signature_path: C:/Users/LENOVO/Desktop/papiers/signature.jpg
+  signature_path: data/signature.jpg

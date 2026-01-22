@@ -13,6 +13,9 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                                QHBoxLayout, QListWidget, QListWidgetItem, QStackedWidget,
                                QLabel, QFrame)
 from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QIcon, QPixmap
+
+from pathlib import Path
 
 from app.ui.views.dashboard_view import DashboardView
 from app.ui.views.immeuble_view import ImmeubleView
@@ -29,6 +32,11 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("Gestion Locative Pro")
         self.setMinimumSize(1200, 800)
+        
+        icon_path = Path(__file__).parent / "app" / "ui" / "icon.png"
+        if icon_path.exists():
+            self.setWindowIcon(QIcon(str(icon_path)))
+        
         self.setup_ui()
         
     def setup_ui(self):
