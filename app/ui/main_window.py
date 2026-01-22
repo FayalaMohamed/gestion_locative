@@ -77,6 +77,11 @@ class MainWindow(QMainWindow):
         self.views["paiement"] = paiement_view
         self.add_view(paiement_view, "Paiements")
         
+        from app.ui.views.settings_view import SettingsView
+        settings_view = SettingsView(self)
+        self.views["settings"] = settings_view
+        self.add_view(settings_view, "Paramètres")
+        
         self.connect_data_changed_signals()
         
     def setup_menu(self):
@@ -86,6 +91,7 @@ class MainWindow(QMainWindow):
         
         export_action = QAction("Exporter...", self)
         export_action.setShortcut("Ctrl+E")
+        export_action.triggered.connect(self.on_export)
         file_menu.addAction(export_action)
         
         file_menu.addSeparator()
@@ -107,19 +113,17 @@ class MainWindow(QMainWindow):
     def setup_connections(self):
         pass
     
-    def connect_data_changed_signals(self):
-        dashboard = self.views.get("dashboard")
-        if dashboard and hasattr(dashboard, 'load_data'):
-            views_to_connect = ["immeuble", "locataire", "contrat", "paiement"]
-            for view_key in views_to_connect:
-                view = self.views.get(view_key)
-                if view and hasattr(view, 'data_changed'):
-                    view.data_changed.connect(dashboard.load_data)
+    def on_export(self):
+        settings_view = self.views.get("settings")
+        if settings_view:
+            index = self.content_stack.indexOf(settings_view)
+            self.content_stack.setCurrentIndex(index)
+            settings_view.on_export()
     
     def add_view(self, view, name, icon=None):
         self.content_stack.addWidget(view)
         self.sidebar.add_item(name, icon)
-        
+    
     def set_current_view(self, index):
         self.content_stack.setCurrentIndex(index)
 
