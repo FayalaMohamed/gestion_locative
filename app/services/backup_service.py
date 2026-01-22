@@ -131,7 +131,7 @@ class BackupService:
 
             backup_dir = self.config.get('export.backup_directory')
             if not backup_dir:
-                backup_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'backups')
+                backup_dir = os.path.normpath(os.path.join(os.path.dirname(os.path.dirname(__file__)), '..', 'data', 'backups'))
 
             Path(backup_dir).mkdir(parents=True, exist_ok=True)
 

@@ -59,6 +59,7 @@ class Bureau(Base):
     numero = Column(String(50), nullable=False)
     etage = Column(String(50), nullable=True)
     surface_m2 = Column(Float, nullable=True)
+    est_disponible = Column(Boolean, default=True)
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
