@@ -164,6 +164,20 @@ Locataire (1) ----> (N) Contrat (1) ----> (N) Paiement
 
 ## Configuration
 
+### Google Drive Backup
+
+Pour configurer la sauvegarde Google Drive, suivez le guide complet :
+
+📖 **[Guide de configuration Google Drive](docs/GOOGLE_DRIVE_SETUP.md)**
+
+Ce guide explique comment :
+- Créer un projet Google Cloud
+- Activer l'API Google Drive
+- Configurer les identifiants OAuth 2.0
+- Se connecter à Google Drive depuis l'application
+
+### Configuration de l'application
+
 Modifier `config.yaml` :
 
 ```yaml
