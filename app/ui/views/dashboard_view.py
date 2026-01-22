@@ -173,7 +173,10 @@ class DashboardView(BaseView):
         
         for col, (y, m) in enumerate(headers):
             lbl = QLabel(f"{mois_noms[m-1]} {y}")
-            lbl.setStyleSheet("font-size: 10px; color: #7f8c8d;")
+            if (y, m) == (cur.year, cur.month):
+                lbl.setStyleSheet("font-size: 10px; color: #2c3e50; font-weight: bold;")
+            else:
+                lbl.setStyleSheet("font-size: 10px; color: #7f8c8d;")
             lbl.setAlignment(Qt.AlignCenter)
             grid_layout.addWidget(lbl, 0, col + 1)
         

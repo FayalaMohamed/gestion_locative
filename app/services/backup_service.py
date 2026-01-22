@@ -129,7 +129,7 @@ class BackupService:
         try:
             logger.info("Starting local backup...")
 
-            backup_dir = self.config.get('export.backup_directory')
+            backup_dir = self.config.backup_directory
             if not backup_dir:
                 backup_dir = os.path.normpath(os.path.join(os.path.dirname(os.path.dirname(__file__)), '..', 'data', 'backups'))
 

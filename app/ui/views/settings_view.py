@@ -344,7 +344,7 @@ class SettingsView(BaseView):
         auth_status = self.backup_service.is_authenticated()
 
         if auth_status:
-            self.google_drive_status.setText("Connecte a Google Drive")
+            self.google_drive_status.setText("Connecté a Google Drive")
             self.google_drive_status.setStyleSheet("color: #27ae60; font-size: 13px;")
             self.btn_google_backup.setEnabled(True)
             self.btn_google_list.setEnabled(True)
@@ -354,7 +354,7 @@ class SettingsView(BaseView):
             self.client_id_input.setEnabled(False)
             self.client_secret_input.setEnabled(False)
         else:
-            self.google_drive_status.setText("Non connecte")
+            self.google_drive_status.setText("Non connecté")
             self.google_drive_status.setStyleSheet("color: #e74c3c; font-size: 13px;")
             self.btn_google_backup.setEnabled(False)
             self.btn_google_list.setEnabled(False)

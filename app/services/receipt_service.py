@@ -156,7 +156,7 @@ class ReceiptService:
         elements.append(Paragraph("Signature:", styles['Normal']))
         elements.append(Spacer(1, 5*mm))
 
-        signature_path = self.config.get('receipts', 'signature_path', default='')
+        signature_path = self.config.get_signature_path()
         if signature_path:
             try:
                 from pathlib import Path

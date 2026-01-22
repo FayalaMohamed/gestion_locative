@@ -125,13 +125,30 @@ class Config:
         """Get the full database path"""
         db_config = self.get('database', default={})
         path = db_config.get('path', 'data/gestion_locative.db')
-        
-        if not os.path.isabs(path):
-            base_dir = Path.cwd()
-            path = str(base_dir / path)
-        
-        return path
-    
+        return self._resolve_path(path)
+
+    def _resolve_path(self, path: str, default: str = '.') -> str:
+        """Resolve a path, making relative paths absolute based on current directory"""
+        if not path:
+            return default
+        if os.path.isabs(path):
+            return path
+        base_dir = Path.cwd()
+        return str(base_dir / path)
+
+    @property
+    def backup_directory(self) -> str:
+        """Get the full backup directory path"""
+        path = self.get('export', 'backup_directory', default='data/backups')
+        return self._resolve_path(path, 'data/backups')
+
+    def get_signature_path(self) -> str:
+        """Get the signature path"""
+        path = self.get('receipts', 'signature_path', default='')
+        if path:
+            return self._resolve_path(path, '')
+        return ''
+
     @property
     def is_debug(self) -> bool:
         """Check if debug mode is enabled"""
