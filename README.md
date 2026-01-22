@@ -9,6 +9,7 @@ D:\code\locations\
 ├── app/
 │   ├── __init__.py
 │   ├── init_db.py              # Créer et initialiser la base de données
+│   ├── test_crud.py            # Tests CRUD
 │   ├── models/
 │   │   ├── __init__.py
 │   │   └── entities.py         # Modèles SQLAlchemy
@@ -17,23 +18,34 @@ D:\code\locations\
 │   │   ├── base.py             # Classe de base Repository
 │   │   ├── immeuble_repository.py
 │   │   ├── bureau_repository.py
-│   │   ├──Locataire_repository.py
+│   │   ├── locataire_repository.py
 │   │   ├── contrat_repository.py
 │   │   └── paiement_repository.py
+│   ├── services/
+│   │   ├── __init__.py
+│   │   ├── audit_service.py
+│   │   ├── data_service.py
+│   │   └── receipt_service.py
 │   ├── database/
 │   │   ├── __init__.py
-│   │   └── connection.py       # Gestion base de données SQLite
+│   │   ├── connection.py       # Gestion base de données SQLite
+│   │   └── migrations/
+│   │       ├── __init__.py
+│   │       └── env.py          # Configuration Alembic
 │   ├── ui/
 │   │   ├── __init__.py
 │   │   ├── main_window.py      # Fenêtre principale Qt
+│   │   ├── grille_paiement.py  # Widget de grille de paiements
 │   │   └── views/
+│   │       ├── __init__.py
 │   │       ├── base_view.py
 │   │       ├── immeuble_view.py
 │   │       ├── bureau_view.py
 │   │       ├── locataire_view.py
 │   │       ├── contrat_view.py
 │   │       ├── paiement_view.py
-│   │       └── dashboard_view.py
+│   │       ├── dashboard_view.py
+│   │       └── settings_view.py
 │   └── utils/
 │       ├── __init__.py
 │       └── config.py           # Configuration YAML
@@ -76,13 +88,17 @@ D:\code\locations\
 - Génération de reçus (placeholder)
 
 ### 6. Tableau de Bord
-- Placeholder (en construction)
+- Vue d'ensemble avec statistiques
+
+### 7. Paramètres
+- Configuration de l'application
 
 ## Prérequis
 
 - Python 3.11+
 - PySide6 (Qt 6)
 - SQLAlchemy
+- Alembic (migrations)
 
 ## Installation
 
@@ -141,8 +157,10 @@ Locataire (1) ----> (N) Contrat (1) ----> (N) Paiement
 - ✅ Filtrage dans toutes les vues
 - ✅ Calcul automatique des mois impayés
 - ✅ Interface Qt avec PySide6
-- ⏳ Tableau de bord (en construction)
-- ⏳ Génération PDF des reçus
+- ✅ Services (audit, données, reçus)
+- ✅ Migrations de base de données
+- ✅ Génération de reçus PDF
+- ✅ Tableau de bord complet (en construction)
 
 ## Configuration
 
