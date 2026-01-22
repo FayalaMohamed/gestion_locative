@@ -17,7 +17,7 @@ from decimal import Decimal
 from app.database.connection import init_database
 from app.models.entities import (
     Immeuble, Bureau, Locataire, Contrat, Paiement,
-    TypePaiement, StatutLocataire
+    TypePaiement, StatutLocataire, DocumentTreeConfig
 )
 
 
@@ -150,6 +150,32 @@ def create_sample_data() -> None:
         print("Sample data created successfully!")
 
 
+def create_default_tree_configs() -> None:
+    """Create default tree configurations for document management"""
+    db = init_database()
+
+    default_configs = {
+        "immeuble": {"name": "Immeuble", "children": []},
+        "bureau": {"name": "Bureau", "children": []},
+        "locataire": {"name": "Locataire", "children": []},
+        "contrat": {"name": "Contrat", "children": []},
+        "paiement": {"name": "Paiement", "children": []}
+    }
+
+    with db.session_scope() as session:
+        for entity_type, tree_structure in default_configs.items():
+            existing = session.query(DocumentTreeConfig).filter(
+                DocumentTreeConfig.entity_type == entity_type
+            ).first()
+            if not existing:
+                config = DocumentTreeConfig(
+                    entity_type=entity_type,
+                    tree_structure=tree_structure
+                )
+                session.add(config)
+        print("Default tree configurations created!")
+
+
 def init_db(include_sample_data: bool = False) -> None:
     """Initialize the database"""
     print(f"Initializing database...")
@@ -158,6 +184,9 @@ def init_db(include_sample_data: bool = False) -> None:
     db = init_database()
     
     print(f"Database created at: {db.engine.url}")
+    
+    # Create default document tree configurations
+    create_default_tree_configs()
     
     if include_sample_data:
         create_sample_data()

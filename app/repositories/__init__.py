@@ -5,6 +5,7 @@ from app.repositories.bureau_repository import BureauRepository
 from app.repositories.locataire_repository import LocataireRepository
 from app.repositories.contrat_repository import ContratRepository, ContratValidationError
 from app.repositories.paiement_repository import PaiementRepository
+from app.repositories.document_repository import DocumentRepository
 
 __all__ = [
     'BaseRepository',
@@ -14,4 +15,5 @@ __all__ = [
     'ContratRepository',
     'ContratValidationError',
     'PaiementRepository',
+    'DocumentRepository',
 ]
