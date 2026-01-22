@@ -44,7 +44,6 @@ def test_immeuble_crud():
         immeuble = repo.create(
             nom="Immeuble Les Palmiers",
             adresse="45 Avenue Habib Bourguiba, Sfax",
-            nombre_bureaux=15,
             notes="Immeuble moderne avec parking"
         )
         print(f"   Cree: {immeuble}")
@@ -87,9 +86,9 @@ def test_bureau_crud(immeuble_id: int):
         # Create multiple bureaux
         print("\n1. Creation de bureaux...")
         bureaux_data = [
-            {"numero": "301", "etage": "3eme etage", "surface_m2": 60.0, "est_disponible": True},
-            {"numero": "302", "etage": "3eme etage", "surface_m2": 45.0, "est_disponible": True},
-            {"numero": "303", "etage": "3eme etage", "surface_m2": 120.0, "est_disponible": False},
+            {"numero": "301", "etage": "3eme etage", "surface_m2": 60.0},
+            {"numero": "302", "etage": "3eme etage", "surface_m2": 45.0},
+            {"numero": "303", "etage": "3eme etage", "surface_m2": 120.0},
         ]
         
         created_ids = []
@@ -133,7 +132,6 @@ def test_locataire_crud(immeuble_id: int):
         # Create
         print("\n1. Creation d'un locataire...")
         Locataire = repo.create(
-            immeuble_id=immeuble_id,
             nom="Ahmed Ben Ahmed",
             telephone="+216 50 111 222",
             email="ahmed.benahmed@email.com",
@@ -322,7 +320,7 @@ def test_grille_calcul(locataire_id: int, contrat_id: int):
             return
             
         print(f"\nContrat #{contrat.id} - Locataire: {contrat.locataire.nom}")
-        print(f"Periode du contrat: {contrat.date_debut} a {contrat.date_fin or 'en cours'}")
+        print(f"Periode du contrat: {contrat.date_debut} a en cours")
         print(f"Mensuel: {contrat.montant_mensuel} TND")
         
         print("\n--- Grille des paiements (Rouge = Impaye, Vert = Paye) ---")

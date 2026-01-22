@@ -1,5 +1,6 @@
 """Audit logging service for tracking entity changes"""
-from datetime import datetime
+from datetime import datetime, date
+from decimal import Decimal
 from typing import Any, Optional, Dict
 from sqlalchemy.orm import Session
 from sqlalchemy.inspection import inspect
@@ -99,6 +100,10 @@ class AuditService:
                         result[key] = AuditService.entity_to_dict(value)
                 elif isinstance(value, datetime):
                     result[key] = value.isoformat()
+                elif isinstance(value, date):
+                    result[key] = value.isoformat()
+                elif isinstance(value, Decimal):
+                    result[key] = float(value)
                 elif hasattr(value, 'value'):
                     result[key] = value.value if isinstance(value.value, (str, int, float, bool, type(None))) else str(value.value)
                 elif not callable(value):

@@ -1,23 +1,9 @@
 app:
   debug: true
-  name: Gestion Locative Pro
-  version: 1.0.0
 database:
   path: D:\code\locations\data\gestion_locative.db
-  type: sqlite
 export:
-  backup_directory: D:\code\locations\backups
-  default_format: json
-google_drive:
-  backup_folder_name: Gestion Locative Pro Backups
-logging:
-  file: D:\code\locations\logs\app.log
-  format: '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-  level: INFO
+  backup_directory: D:\code\locations\data\backups
 receipts:
-  company_address: ''
   company_name: Magic House
-  company_phone: ''
-  output_path: D:\code\locations\data\receipts
   signature_path: C:/Users/LENOVO/Desktop/papiers/signature.jpg
-  template_path: D:\code\locations\app\reports\templates

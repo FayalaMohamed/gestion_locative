@@ -9,7 +9,6 @@ D:\code\locations\
 ├── app/
 │   ├── __init__.py
 │   ├── init_db.py              # Créer et initialiser la base de données
-│   ├── test_crud.py            # Tests CRUD
 │   ├── models/
 │   │   ├── __init__.py
 │   │   └── entities.py         # Modèles SQLAlchemy
@@ -24,7 +23,9 @@ D:\code\locations\
 │   ├── services/
 │   │   ├── __init__.py
 │   │   ├── audit_service.py
+│   │   ├── backup_service.py
 │   │   ├── data_service.py
+│   │   ├── google_drive_service.py
 │   │   └── receipt_service.py
 │   ├── database/
 │   │   ├── __init__.py
@@ -49,7 +50,17 @@ D:\code\locations\
 │   └── utils/
 │       ├── __init__.py
 │       └── config.py           # Configuration YAML
+├── data/
+│   ├── gestion_locative.db     # Base de données SQLite
+│   └── backups/                # Sauvegardes locales
+├── tests/
+│   ├── __init__.py
+│   ├── test_crud.py            # Tests CRUD Operations
+│   ├── test_backup.py          # Tests Backup Functionality
+│   ├── test_relation.py        # Tests Relationship
+│   └── query_db.py             # Utilitaire de consultation
 ├── config.yaml                 # Configuration de l'application
+├── run_tests.py                # Script de test unifié
 └── requirements.txt            # Dépendances Python
 ```
 
@@ -135,6 +146,40 @@ python "D:\code\locations\app\init_db.py" --seed
 python -m app.main
 ```
 
+## Tests
+
+### Exécuter tous les tests
+
+```bash
+python run_tests.py
+```
+
+Ce script exécute tous les tests et affiche un rapport :
+- Tests réussis : [PASS]
+- Tests échoués : [FAIL]
+
+### Tests individuels
+
+```bash
+# Tests CRUD
+python tests/test_crud.py
+
+# Tests de sauvegarde
+python tests/test_backup.py
+
+# Tests des relations
+python tests/test_relation.py
+
+# Consulter la base de données
+python tests/query_db.py
+```
+
+### Nettoyage des sauvegardes de test
+
+Les tests de sauvegarde (`test_backup.py`) créent des fichiers temporaires qui sont automatiquement supprimés après chaque exécution.
+
+Les sauvegardes sont stockées dans `data/backups/`.
+
 ## Modèle de Données
 
 ```
@@ -160,7 +205,8 @@ Locataire (1) ----> (N) Contrat (1) ----> (N) Paiement
 - ✅ Services (audit, données, reçus)
 - ✅ Migrations de base de données
 - ✅ Génération de reçus PDF
-- ✅ Tableau de bord complet (en construction)
+- ✅ Sauvegarde locale et Google Drive
+- ✅ Tests unitaires avec rapport
 
 ## Configuration
 
@@ -182,11 +228,17 @@ Modifier `config.yaml` :
 
 ```yaml
 app:
-  name: "Gestion Locative Pro"
   debug: true
 
 database:
   path: "data/gestion_locative.db"
+
+export:
+  backup_directory: "data/backups"
+
+receipts:
+  company_name: "Magic House"
+  signature_path: "C:/path/to/signature.jpg"
 ```
 
 ## Licence
