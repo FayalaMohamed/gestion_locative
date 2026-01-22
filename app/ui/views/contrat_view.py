@@ -88,6 +88,16 @@ class ContratView(BaseView):
         self.btn_delete.setStyleSheet("background-color: #e74c3c; color: white; padding: 8px 16px; border-radius: 4px; border: none;")
         buttons_layout.addWidget(self.btn_delete)
         
+        buttons_layout.addStretch()
+        
+        self.btn_configure_tree = QPushButton("⚙️ Configurer arborescence")
+        self.btn_configure_tree.setStyleSheet("background-color: #95a5a6; color: white; padding: 8px 16px; border-radius: 4px; border: none;")
+        buttons_layout.addWidget(self.btn_configure_tree)
+        
+        self.btn_browse_docs = QPushButton("📂 Parcourir documents")
+        self.btn_browse_docs.setStyleSheet("background-color: #9b59b6; color: white; padding: 8px 16px; border-radius: 4px; border: none;")
+        buttons_layout.addWidget(self.btn_browse_docs)
+        
         left_layout.addLayout(buttons_layout)
         
         splitter.addWidget(left_widget)
@@ -122,10 +132,13 @@ class ContratView(BaseView):
         self.btn_add.clicked.connect(self.on_add)
         self.btn_edit.clicked.connect(self.on_edit)
         self.btn_delete.clicked.connect(self.on_delete)
+        self.btn_configure_tree.clicked.connect(self.on_configure_tree)
+        self.btn_browse_docs.clicked.connect(self.on_browse_documents)
         self.table.itemSelectionChanged.connect(self.on_selection_changed)
         self.locataire_combo.currentIndexChanged.connect(self.load_data)
         self.statut_combo.currentIndexChanged.connect(self.load_data)
         self.load_data()
+        self.on_selection_changed()
         
     def load_data(self):
         if self._is_loading:
@@ -570,6 +583,65 @@ class ContratView(BaseView):
                 self.data_changed.emit()
             except Exception as e:
                 QMessageBox.critical(self, "Erreur", f"Erreur: {str(e)}")
+                
+    def on_selection_changed(self):
+        selected = self.table.selectedItems()
+        self.btn_browse_docs.setEnabled(bool(selected))
+        if not selected:
+            self.clear_details()
+            return
+            
+        item_id = int(self.table.item(selected[0].row(), 0).text())
+        self.show_details(item_id)
+        
+    def on_configure_tree(self):
+        try:
+            from app.database.connection import get_database
+            from app.services.document_service import DocumentService
+            from app.ui.dialogs.tree_config_dialog import TreeConfigDialog
+            
+            db = get_database()
+            doc_service = DocumentService(db.get_session())
+            existing_config = doc_service.get_tree_config("contrat")
+            
+            dialog = TreeConfigDialog("contrat", existing_config, self)
+            dialog.exec()
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur", f"Erreur: {str(e)}")
+            
+    def on_browse_documents(self):
+        selected = self.table.selectedItems()
+        if not selected:
+            QMessageBox.warning(self, "Sélection", "Veuillez sélectionner un contrat pour consulter ses documents.")
+            return
+            
+        item_id = int(self.table.item(selected[0].row(), 0).text())
+        item_name = f"Contrat #{item_id}"
+        
+        self.show_document_browser(item_id, item_name)
+        
+    def show_document_browser(self, item_id, item_name):
+        try:
+            from app.database.connection import get_database
+            from app.services.document_service import DocumentService
+            from app.ui.dialogs.document_browser_dialog import DocumentBrowserDialog
+            
+            db = get_database()
+            doc_service = DocumentService(db.get_session())
+            
+            dialog = DocumentBrowserDialog(
+                entity_type="contrat",
+                entity_id=item_id,
+                entity_name=item_name,
+                doc_service=doc_service,
+                parent=self
+            )
+            
+            dialog.exec()
+                
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur", f"Erreur: {str(e)}")
 
 
 from PySide6.QtWidgets import QDialog, QDialogButtonBox, QSplitter

@@ -103,6 +103,14 @@ class PaiementView(BaseView):
         
         buttons_layout.addStretch()
         
+        self.btn_configure_tree = QPushButton("⚙️ Configurer arborescence")
+        self.btn_configure_tree.setStyleSheet("background-color: #95a5a6; color: white; padding: 8px 16px; border-radius: 4px; border: none;")
+        buttons_layout.addWidget(self.btn_configure_tree)
+        
+        self.btn_browse_docs = QPushButton("📂 Parcourir documents")
+        self.btn_browse_docs.setStyleSheet("background-color: #9b59b6; color: white; padding: 8px 16px; border-radius: 4px; border: none;")
+        buttons_layout.addWidget(self.btn_browse_docs)
+        
         self.layout().addLayout(buttons_layout)
         
     def setup_connections(self):
@@ -111,6 +119,8 @@ class PaiementView(BaseView):
         self.btn_edit.clicked.connect(self.on_edit)
         self.btn_delete.clicked.connect(self.on_delete)
         self.btn_receipt.clicked.connect(self.on_receipt)
+        self.btn_configure_tree.clicked.connect(self.on_configure_tree)
+        self.btn_browse_docs.clicked.connect(self.on_browse_documents)
         self.contrat_combo.currentIndexChanged.connect(self.load_data)
         self.type_combo.currentIndexChanged.connect(self.load_data)
         self.search_edit.textChanged.connect(self.on_search)
@@ -307,12 +317,57 @@ class PaiementView(BaseView):
     def on_search(self, text):
         for row in range(self.table.rowCount()):
             match = False
-            for col in range(self.table.columnCount()):
-                item = self.table.item(row, col)
-                if item and text.lower() in item.text().lower():
-                    match = True
-                    break
-            self.table.setRowHidden(row, not match)
+        for col in range(self.table.columnCount()):
+                item.setFlags(Qt.ItemIsSelectable | Qt.ItemIsEnabled)
+                
+    def on_configure_tree(self):
+        try:
+            from app.database.connection import get_database
+            from app.services.document_service import DocumentService
+            from app.ui.dialogs.tree_config_dialog import TreeConfigDialog
+            
+            db = get_database()
+            doc_service = DocumentService(db.get_session())
+            existing_config = doc_service.get_tree_config("paiement")
+            
+            dialog = TreeConfigDialog("paiement", existing_config, self)
+            dialog.exec()
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur", f"Erreur: {str(e)}")
+            
+    def on_browse_documents(self):
+        selected = self.table.selectedItems()
+        if not selected:
+            QMessageBox.warning(self, "Sélection", "Veuillez sélectionner un paiement pour consulter ses documents.")
+            return
+            
+        item_id = int(self.table.item(selected[0].row(), 0).text())
+        item_name = f"Paiement #{item_id}"
+        
+        self.show_document_browser(item_id, item_name)
+        
+    def show_document_browser(self, item_id, item_name):
+        try:
+            from app.database.connection import get_database
+            from app.services.document_service import DocumentService
+            from app.ui.dialogs.document_browser_dialog import DocumentBrowserDialog
+            
+            db = get_database()
+            doc_service = DocumentService(db.get_session())
+            
+            dialog = DocumentBrowserDialog(
+                entity_type="paiement",
+                entity_id=item_id,
+                entity_name=item_name,
+                doc_service=doc_service,
+                parent=self
+            )
+            
+            dialog.exec()
+                
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur", f"Erreur: {str(e)}")
 
 
 from PySide6.QtWidgets import QDialog, QDialogButtonBox

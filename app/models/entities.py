@@ -217,16 +217,16 @@ class AuditLog(Base):
     __tablename__ = "audit_logs"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    
+
     # Action
     table_nom = Column(String(100), nullable=False)
     entite_id = Column(Integer, nullable=True)
     action = Column(String(50), nullable=False)
-    
+
     # Données
     donnees_avant = Column(JSON, nullable=True)
     donnees_apres = Column(JSON, nullable=True)
-    
+
     # Contexte
     utilisateur = Column(String(100), nullable=True)
     ip_address = Column(String(50), nullable=True)
@@ -234,3 +234,35 @@ class AuditLog(Base):
 
     def __repr__(self):
         return f"<AuditLog(id={self.id}, action={self.action}, table={self.table_nom})>"
+
+
+class DocumentTreeConfig(Base):
+    __tablename__ = "document_tree_configs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    entity_type = Column(String(50), nullable=False, unique=True)
+    tree_structure = Column(JSON, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def __repr__(self):
+        return f"<DocumentTreeConfig(entity_type='{self.entity_type}')>"
+
+
+class Document(Base):
+    __tablename__ = "documents"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    entity_type = Column(String(50), nullable=False)
+    entity_id = Column(Integer, nullable=False)
+    folder_path = Column(String(500), nullable=False)
+    filename = Column(String(500), nullable=False)
+    original_name = Column(String(500), nullable=False)
+    file_type = Column(String(100), nullable=True)
+    file_size = Column(Integer, nullable=True)
+    description = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def __repr__(self):
+        return f"<Document(id={self.id}, entity_type='{self.entity_type}', entity_id={self.entity_id}, filename='{self.filename}')>"
