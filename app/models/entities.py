@@ -171,6 +171,11 @@ class Paiement(Base):
     type_paiement = Column(Enum(TypePaiement), nullable=False)
     montant_total = Column(Numeric(10, 3), nullable=False)
     
+    # Détails des frais pour les paiements de loyer
+    frais_menage = Column(Numeric(10, 3), nullable=True, default=0)
+    frais_sonede = Column(Numeric(10, 3), nullable=True, default=0)  # Frais eau
+    frais_steg = Column(Numeric(10, 3), nullable=True, default=0)   # Frais électricité
+    
     # Dates
     date_paiement = Column(Date, nullable=False)
     date_debut_periode = Column(Date, nullable=True)
