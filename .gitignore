@@ -44,3 +44,6 @@ venv/
 # Data files
 data/
 app/data/google_drive_token.json
+app/credentials/
+credentials.json
+client_secret.json
