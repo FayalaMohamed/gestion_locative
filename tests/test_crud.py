@@ -351,6 +351,56 @@ def test_grille_calcul(locataire_id: int, contrat_id: int):
         print(f"  - Total paye: {paiement_repo.get_total_loyers_payes(contrat_id, 2024)} TND")
 
 
+def cleanup_test_data(immeuble_id: int, locataire_id: int, contrat_id: int, bureau_ids: list):
+    """Clean up all test data created during tests"""
+    print_section("NETTOYAGE DES DONNEES DE TEST")
+    
+    db = get_database()
+    
+    with db.session_scope() as session:
+        # Delete in reverse order of dependencies
+        
+        # 1. Delete paiements
+        print("\n1. Suppression des paiements...")
+        paiements = session.query(Paiement).filter(
+            Paiement.contrat_id == contrat_id
+        ).all()
+        for p in paiements:
+            session.delete(p)
+        print(f"   Supprimés: {len(paiements)} paiement(s)")
+        
+        # 2. Delete contrat (this will clear contrat_bureau association table)
+        print("\n2. Suppression du contrat...")
+        contrat = session.query(Contrat).filter(Contrat.id == contrat_id).first()
+        if contrat:
+            session.delete(contrat)
+            print(f"   Supprimé: Contrat #{contrat_id}")
+        
+        # 3. Delete locataire
+        print("\n3. Suppression du locataire...")
+        locataire = session.query(Locataire).filter(Locataire.id == locataire_id).first()
+        if locataire:
+            session.delete(locataire)
+            print(f"   Supprimé: {locataire.nom}")
+        
+        # 4. Delete bureaux
+        print("\n4. Suppression des bureaux...")
+        for bureau_id in bureau_ids:
+            bureau = session.query(Bureau).filter(Bureau.id == bureau_id).first()
+            if bureau:
+                session.delete(bureau)
+                print(f"   Supprimé: Bureau {bureau.numero}")
+        
+        # 5. Delete immeuble
+        print("\n5. Suppression de l'immeuble...")
+        immeuble = session.query(Immeuble).filter(Immeuble.id == immeuble_id).first()
+        if immeuble:
+            session.delete(immeuble)
+            print(f"   Supprimé: {immeuble.nom}")
+        
+        print("\n   [OK] Toutes les données de test ont été nettoyées")
+
+
 def main():
     """Run all CRUD tests"""
     print("=" * 60)
@@ -358,15 +408,20 @@ def main():
     print("  Application Gestion Locative Pro")
     print("=" * 60)
     
+    immeuble_id = None
+    bureau_ids = []
+    locataire_id = None
+    contrat_id = None
+    
     try:
         immeuble_id = test_immeuble_crud()
         bureau_ids = test_bureau_crud(immeuble_id)
-        Locataire_id = test_locataire_crud(immeuble_id)
-        contrat_id = test_contrat_crud(Locataire_id, bureau_ids)
+        locataire_id = test_locataire_crud(immeuble_id)
+        contrat_id = test_contrat_crud(locataire_id, bureau_ids)
         
         if contrat_id:
-            test_paiement_crud(Locataire_id, contrat_id)
-            test_grille_calcul(Locataire_id, contrat_id)
+            test_paiement_crud(locataire_id, contrat_id)
+            test_grille_calcul(locataire_id, contrat_id)
         
         print("\n" + "=" * 60)
         print("  TOUS LES TESTS REUSSIS!")
@@ -377,6 +432,13 @@ def main():
         import traceback
         traceback.print_exc()
         sys.exit(1)
+    finally:
+        # Clean up test data
+        if immeuble_id and bureau_ids and locataire_id and contrat_id:
+            try:
+                cleanup_test_data(immeuble_id, locataire_id, contrat_id, bureau_ids)
+            except Exception as e:
+                print(f"\n[AVERTISSEMENT] Erreur lors du nettoyage: {e}")
 
 
 if __name__ == "__main__":

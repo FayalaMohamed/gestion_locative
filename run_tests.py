@@ -13,6 +13,7 @@ TEST_FILES = [
     ('test_crud.py', 'CRUD Operations'),
     ('test_backup.py', 'Backup Functionality'),
     ('test_relation.py', 'Relationship Tests'),
+    ('test_update_system.py', 'Update System'),
 ]
 
 # Non-test utilities (not run as tests)

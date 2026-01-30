@@ -4,6 +4,7 @@
 This script initializes the database, creates all tables, and optionally
 seeds the database with initial data.
 """
+import os
 import sys
 from pathlib import Path
 
@@ -14,11 +15,55 @@ sys.path.insert(0, str(project_root))
 from datetime import datetime
 from decimal import Decimal
 
+from alembic import command
+from alembic.config import Config as AlembicConfig
+
 from app.database.connection import init_database
 from app.models.entities import (
     Immeuble, Bureau, Locataire, Contrat, Paiement,
     TypePaiement, StatutLocataire, DocumentTreeConfig
 )
+
+
+DB_PATH = project_root / "data" / "gestion_locative.db"
+ALEMBIC_INI_PATH = project_root / "alembic.ini"
+
+
+def create_empty_database() -> None:
+    """Create an empty database with all tables using Alembic migrations.
+    
+    This function:
+    1. Checks if database already exists and warns user
+    2. Creates the data directory if it doesn't exist
+    3. Runs alembic upgrade head to create all tables
+    4. Does NOT add any sample data
+    5. Prints success message with database path
+    """
+    # Check if database already exists
+    if DB_PATH.exists():
+        print(f"Warning: Database already exists at: {DB_PATH}")
+        response = input("Do you want to recreate it? This will delete all existing data. [y/N]: ")
+        if response.lower() != 'y':
+            print("Operation cancelled.")
+            return
+        # Remove existing database
+        DB_PATH.unlink()
+        print("Existing database removed.")
+    
+    # Create data directory if it doesn't exist
+    data_dir = DB_PATH.parent
+    data_dir.mkdir(parents=True, exist_ok=True)
+    print(f"Data directory ready: {data_dir}")
+    
+    # Configure Alembic
+    alembic_cfg = AlembicConfig(str(ALEMBIC_INI_PATH))
+    
+    # Run migrations to create all tables
+    print("Running Alembic migrations...")
+    command.upgrade(alembic_cfg, "head")
+    
+    # Print success message
+    print(f"Empty database created successfully at: {DB_PATH}")
 
 
 def create_sample_data() -> None:
@@ -205,19 +250,37 @@ def main():
     import argparse
     
     parser = argparse.ArgumentParser(description="Database initialization for Gestion Locative")
-    parser.add_argument(
+    
+    # Create mutually exclusive group for --empty and --seed
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument(
+        "--empty",
+        action="store_true",
+        help="Create an empty database with all tables (no sample data)"
+    )
+    group.add_argument(
         "--seed",
         action="store_true",
-        help="Create sample data after initialization"
+        help="Create database with sample data"
     )
     
     args = parser.parse_args()
     
     try:
-        init_db(include_sample_data=args.seed)
+        if args.empty:
+            # Create empty database using Alembic migrations
+            create_empty_database()
+            # Also create default tree configurations
+            create_default_tree_configs()
+        elif args.seed:
+            # Create database with sample data
+            init_db(include_sample_data=True)
+        
         print("Done!")
     except Exception as e:
         print(f"Error: {e}")
+        import traceback
+        traceback.print_exc()
         sys.exit(1)
 
 
