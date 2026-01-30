@@ -572,7 +572,38 @@ class PaiementDialog(QDialog):
         self.montant.setMaximum(10000000)
         self.montant.setSuffix(" TND")
         self.montant.setDecimals(3)
-        form_layout.addRow("Montant*:", self.montant)
+        form_layout.addRow("Montant total*:", self.montant)
+        
+        # Group for frais details (visible only for loyer)
+        self.frais_group = QGroupBox("Détails des frais (pour loyer)")
+        frais_layout = QFormLayout()
+        
+        self.frais_menage = QDoubleSpinBox()
+        self.frais_menage.setMinimum(0)
+        self.frais_menage.setMaximum(10000000)
+        self.frais_menage.setSuffix(" TND")
+        self.frais_menage.setDecimals(3)
+        self.frais_menage.setValue(0)
+        frais_layout.addRow("Frais ménage:", self.frais_menage)
+        
+        self.frais_sonede = QDoubleSpinBox()
+        self.frais_sonede.setMinimum(0)
+        self.frais_sonede.setMaximum(10000000)
+        self.frais_sonede.setSuffix(" TND")
+        self.frais_sonede.setDecimals(3)
+        self.frais_sonede.setValue(0)
+        frais_layout.addRow("Frais SONEDE (eau):", self.frais_sonede)
+        
+        self.frais_steg = QDoubleSpinBox()
+        self.frais_steg.setMinimum(0)
+        self.frais_steg.setMaximum(10000000)
+        self.frais_steg.setSuffix(" TND")
+        self.frais_steg.setDecimals(3)
+        self.frais_steg.setValue(0)
+        frais_layout.addRow("Frais STEG (élec.):", self.frais_steg)
+        
+        self.frais_group.setLayout(frais_layout)
+        form_layout.addRow(self.frais_group)
         
         self.date_paiement = QDateEdit()
         self.date_paiement.setCalendarPopup(True)
@@ -626,7 +657,9 @@ class PaiementDialog(QDialog):
         layout.addWidget(buttons)
         
         self.locataire_combo.currentIndexChanged.connect(self.on_locataire_changed)
+        self.type_combo.currentIndexChanged.connect(self.on_type_changed)
         self.load_contrats()
+        self.on_type_changed()  # Initialize visibility
         
     def load_locataires(self):
         try:
@@ -652,6 +685,13 @@ class PaiementDialog(QDialog):
             loc_id = self.locataire_combo.itemData(self.locataire_combo.currentIndex())
         if loc_id:
             self.load_contrats()
+    
+    def on_type_changed(self):
+        """Show/hide frais group based on payment type"""
+        type_name = self.type_combo.currentData()
+        is_loyer = type_name == "LOYER"
+        self.frais_group.setVisible(is_loyer)
+        self.periode_group.setVisible(is_loyer)
             
     def load_contrats(self):
         loc_id = self.locataire_combo.currentData()
@@ -715,6 +755,11 @@ class PaiementDialog(QDialog):
                     self.montant.setValue(float(p.montant_total or 0))
                     self.date_paiement.setDate(p.date_paiement)
                     
+                    # Load frais details for loyer
+                    self.frais_menage.setValue(float(p.frais_menage or 0))
+                    self.frais_sonede.setValue(float(p.frais_sonede or 0))
+                    self.frais_steg.setValue(float(p.frais_steg or 0))
+                    
                     if p.date_debut_periode:
                         self.mois_debut_combo.setCurrentIndex(p.date_debut_periode.month - 1)
                         self.annee_debut_spin.setValue(p.date_debut_periode.year)
@@ -723,6 +768,9 @@ class PaiementDialog(QDialog):
                         self.annee_fin_spin.setValue(p.date_fin_periode.year)
                         
                     self.commentaire_edit.setText(p.commentaire or "")
+                    
+                    # Ensure proper visibility of frais_group based on payment type
+                    self.on_type_changed()
                     
         except Exception as e:
             QMessageBox.critical(self, "Erreur", f"Erreur: {str(e)}")
@@ -783,7 +831,10 @@ class PaiementDialog(QDialog):
                             date_paiement=self.date_paiement.date().toPython(),
                             date_debut_periode=date_debut,
                             date_fin_periode=date_fin,
-                            commentaire=self.commentaire_edit.toPlainText().strip() or None
+                            commentaire=self.commentaire_edit.toPlainText().strip() or None,
+                            frais_menage=self.frais_menage.value() if type_paiement == TypePaiement.LOYER else None,
+                            frais_sonede=self.frais_sonede.value() if type_paiement == TypePaiement.LOYER else None,
+                            frais_steg=self.frais_steg.value() if type_paiement == TypePaiement.LOYER else None
                         )
                 else:
                     date_debut = None
@@ -806,7 +857,10 @@ class PaiementDialog(QDialog):
                         date_paiement=self.date_paiement.date().toPython(),
                         date_debut_periode=date_debut,
                         date_fin_periode=date_fin,
-                        commentaire=self.commentaire_edit.toPlainText().strip() or None
+                        commentaire=self.commentaire_edit.toPlainText().strip() or None,
+                        frais_menage=self.frais_menage.value() if type_paiement == TypePaiement.LOYER else None,
+                        frais_sonede=self.frais_sonede.value() if type_paiement == TypePaiement.LOYER else None,
+                        frais_steg=self.frais_steg.value() if type_paiement == TypePaiement.LOYER else None
                     )
                     
                 self.accept()

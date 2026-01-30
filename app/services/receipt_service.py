@@ -115,8 +115,21 @@ class ReceiptService:
         payment_data = [
             ['Type de paiement:', type_label],
             ['Date de paiement:', paiement.date_paiement.strftime('%d/%m/%Y')],
-            ['Montant:', f"{float(paiement.montant_total):,.0f} TND"],
+            ['Montant total:', f"{float(paiement.montant_total):,.0f} TND"],
         ]
+        
+        # Add frais details for loyer payments
+        if paiement.type_paiement.value == 'loyer':
+            frais_menage = float(paiement.frais_menage or 0)
+            frais_sonede = float(paiement.frais_sonede or 0)
+            frais_steg = float(paiement.frais_steg or 0)
+            
+            if frais_menage > 0:
+                payment_data.append(['Frais ménage:', f"{frais_menage:,.0f} TND"])
+            if frais_sonede > 0:
+                payment_data.append(['Frais SONEDE (eau):', f"{frais_sonede:,.0f} TND"])
+            if frais_steg > 0:
+                payment_data.append(['Frais STEG (élec.):', f"{frais_steg:,.0f} TND"])
 
         if paiement.date_debut_periode and paiement.date_fin_periode:
             payment_data.append([

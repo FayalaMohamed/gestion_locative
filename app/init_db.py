@@ -129,21 +129,27 @@ def create_sample_data() -> None:
             Locataire_id=locataire1.id,
             contrat_id=contrat1.id,
             type_paiement=TypePaiement.LOYER,
-            montant_total=Decimal("1500.000"),
+            montant_total=Decimal("1650.000"),
+            frais_menage=Decimal("50.000"),
+            frais_sonede=Decimal("50.000"),
+            frais_steg=Decimal("50.000"),
             date_paiement=datetime(2024, 1, 1).date(),
             date_debut_periode=datetime(2024, 1, 1).date(),
             date_fin_periode=datetime(2024, 1, 31).date(),
-            commentaire="Loyer Janvier 2024"
+            commentaire="Loyer Janvier 2024 avec frais"
         )
         paiement3 = Paiement(
             Locataire_id=locataire1.id,
             contrat_id=contrat1.id,
             type_paiement=TypePaiement.LOYER,
-            montant_total=Decimal("1500.000"),
+            montant_total=Decimal("1600.000"),
+            frais_menage=Decimal("50.000"),
+            frais_sonede=Decimal("50.000"),
+            frais_steg=Decimal("0.000"),
             date_paiement=datetime(2024, 2, 1).date(),
             date_debut_periode=datetime(2024, 2, 1).date(),
             date_fin_periode=datetime(2024, 2, 29).date(),
-            commentaire="Loyer Février 2024"
+            commentaire="Loyer Février 2024 avec frais ménage et eau"
         )
         session.add_all([paiement1, paiement2, paiement3])
         
