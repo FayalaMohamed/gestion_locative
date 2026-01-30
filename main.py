@@ -25,7 +25,7 @@ from PySide6.QtWidgets import QGraphicsOpacityEffect
 from PySide6.QtGui import QIcon, QPixmap
 
 # Version actuelle de l'application - changez ceci pour chaque release
-APP_VERSION = "0"
+APP_VERSION = "0.1"
 GITHUB_REPO = "FayalaMohamed/gestion_locative"
 
 from app.ui.views.dashboard_view import DashboardView

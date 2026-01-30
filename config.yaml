@@ -1,5 +1,6 @@
 app:
   debug: true
+  version: '0'
 database:
   path: data/gestion_locative.db
 export:
@@ -9,4 +10,4 @@ receipts:
   company_names:
   - Magic House
   signature_path: ''
-  signatures:
+  signatures: null
