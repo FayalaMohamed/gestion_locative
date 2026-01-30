@@ -691,14 +691,19 @@ class ContratView(BaseView):
             from app.database.connection import get_database
             from app.services.document_service import DocumentService
             from app.ui.dialogs.tree_config_dialog import TreeConfigDialog
-            
+
             db = get_database()
-            doc_service = DocumentService(db.get_session())
-            existing_config = doc_service.get_tree_config("contrat")
-            
-            dialog = TreeConfigDialog("contrat", existing_config, self)
-            dialog.exec()
-            
+            with db.session_scope() as session:
+                doc_service = DocumentService(session)
+                existing_config = doc_service.get_tree_config("contrat")
+
+                dialog = TreeConfigDialog("contrat", existing_config, self)
+                # Connect the save signal to actually save the configuration
+                dialog.config_saved.connect(
+                    lambda entity_type, tree_structure: doc_service.save_tree_config(entity_type, tree_structure)
+                )
+                dialog.exec()
+
         except Exception as e:
             QMessageBox.critical(self, "Erreur", f"Erreur: {str(e)}")
             
