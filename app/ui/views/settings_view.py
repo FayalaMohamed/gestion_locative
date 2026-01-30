@@ -10,7 +10,8 @@ from typing import Any, Dict, Optional
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QGroupBox, QFormLayout, QFileDialog, QMessageBox, QProgressBar,
-    QTextEdit, QLineEdit, QListWidget, QListWidgetItem, QInputDialog
+    QTextEdit, QLineEdit, QListWidget, QListWidgetItem, QInputDialog,
+    QScrollArea
 )
 from PySide6.QtGui import QPixmap
 from PySide6.QtCore import Qt, QTimer
@@ -25,6 +26,16 @@ class SettingsView(BaseView):
     def setup_ui(self):
         super().setup_ui()
 
+        # Create scroll area for settings content
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        
+        # Create container widget for scroll area
+        container = QWidget()
+        container_layout = QVBoxLayout(container)
+        container_layout.setSpacing(15)
+        
         header_layout = QHBoxLayout()
 
         title = QLabel("Paramètres")
@@ -32,7 +43,7 @@ class SettingsView(BaseView):
         header_layout.addWidget(title)
 
         header_layout.addStretch()
-        self.layout().addLayout(header_layout)
+        container_layout.addLayout(header_layout)
 
         export_group = QGroupBox("Exportation des données")
         export_layout = QFormLayout()
@@ -46,7 +57,7 @@ class SettingsView(BaseView):
         export_layout.addRow("", self.export_info)
 
         export_group.setLayout(export_layout)
-        self.layout().addWidget(export_group)
+        container_layout.addWidget(export_group)
 
         import_group = QGroupBox("Importation des données")
         import_layout = QFormLayout()
@@ -60,7 +71,7 @@ class SettingsView(BaseView):
         import_layout.addRow("", self.import_warning)
 
         import_group.setLayout(import_layout)
-        self.layout().addWidget(import_group)
+        container_layout.addWidget(import_group)
 
         signature_group = QGroupBox("Signatures sur les reçus")
         signature_layout = QVBoxLayout()
@@ -95,7 +106,7 @@ class SettingsView(BaseView):
         signature_layout.addLayout(sig_buttons_layout)
 
         signature_group.setLayout(signature_layout)
-        self.layout().addWidget(signature_group)
+        container_layout.addWidget(signature_group)
 
         google_drive_group = QGroupBox("Google Drive - Sauvegarde Cloud")
         google_drive_layout = QFormLayout()
@@ -141,9 +152,15 @@ class SettingsView(BaseView):
         google_drive_layout.addRow("", self.google_info)
 
         google_drive_group.setLayout(google_drive_layout)
-        self.layout().addWidget(google_drive_group)
+        container_layout.addWidget(google_drive_group)
 
-        self.layout().addStretch()
+        container_layout.addStretch()
+        
+        # Set container as scroll area widget
+        scroll_area.setWidget(container)
+        
+        # Add scroll area to main layout
+        self.layout().addWidget(scroll_area)
 
     def setup_connections(self):
         self.btn_export.clicked.connect(self.on_export)

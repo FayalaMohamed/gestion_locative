@@ -17,10 +17,11 @@ from app.models.entities import (
     Immeuble, Bureau, Locataire, Contrat, Paiement, 
     TypePaiement, StatutLocataire
 )
-from app.repositories import (
-    ImmeubleRepository, BureauRepository, LocataireRepository,
-    ContratRepository, PaiementRepository, ContratValidationError
-)
+from app.repositories.immeuble_repository import ImmeubleRepository
+from app.repositories.bureau_repository import BureauRepository
+from app.repositories.locataire_repository import LocataireRepository
+from app.repositories.contrat_repository import ContratRepository, ContratValidationError
+from app.repositories.paiement_repository import PaiementRepository
 
 
 def print_section(title: str):

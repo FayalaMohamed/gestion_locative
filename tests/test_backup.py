@@ -40,10 +40,13 @@ def test_local_backup():
 
     if result['success']:
         print(f"[OK] Local backup successful!")
-        print(f"  File: {result['file_path']}")
-        print(f"  Size: {result['file_size']} bytes")
+        file_path = os.path.join(result['folder_path'], result['file_name'])
+        file_size = os.path.getsize(file_path) if os.path.exists(file_path) else 0
+        print(f"  Folder: {result['folder_path']}")
+        print(f"  File: {result['file_name']}")
+        print(f"  Size: {file_size} bytes")
         print(f"  Date: {result['backup_date']}")
-        _created_backup_files.append(result['file_path'])
+        _created_backup_files.append(result['folder_path'])
     else:
         print(f"[FAIL] Local backup failed: {result.get('error')}")
 

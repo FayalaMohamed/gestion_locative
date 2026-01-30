@@ -3,7 +3,6 @@ from typing import TypeVar, Generic, Optional, List, Type
 from sqlalchemy.orm import Session
 
 from app.models.entities import Base
-from app.services.audit_service import AuditService
 
 
 T = TypeVar('T', bound=Base)
@@ -28,6 +27,7 @@ class BaseRepository(Generic[T]):
     
     def create(self, **kwargs) -> T:
         """Create a new entity"""
+        from app.services.audit_service import AuditService
         entity = self.model_class(**kwargs)
         self.session.add(entity)
         self.session.flush()
@@ -36,6 +36,7 @@ class BaseRepository(Generic[T]):
     
     def update(self, entity: T, **kwargs) -> T:
         """Update an existing entity"""
+        from app.services.audit_service import AuditService
         before_state = AuditService.entity_to_dict(entity)
         for key, value in kwargs.items():
             if hasattr(entity, key):
@@ -46,6 +47,7 @@ class BaseRepository(Generic[T]):
     
     def delete(self, entity: T) -> bool:
         """Delete an entity"""
+        from app.services.audit_service import AuditService
         try:
             before_state = AuditService.entity_to_dict(entity)
             entity_id = entity.id
