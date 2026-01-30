@@ -36,16 +36,20 @@ class LocataireView(BaseView):
         
         filter_layout = QHBoxLayout()
         
+        self.search_edit = QLineEdit()
+        self.search_edit.setPlaceholderText("Rechercher par nom, CIN, email, immeuble...")
+        self.search_edit.setMinimumWidth(300)
+        filter_layout.addWidget(self.search_edit)
+        
         self.statut_combo = QComboBox()
         self.statut_combo.addItem("Tous les statuts", None)
         self.statut_combo.addItem("Actifs", "actif")
         self.statut_combo.addItem("Historique", "historique")
         filter_layout.addWidget(self.statut_combo)
         
-        self.search_edit = QLineEdit()
-        self.search_edit.setPlaceholderText("Rechercher par nom, CIN, email...")
-        self.search_edit.setMinimumWidth(300)
-        filter_layout.addWidget(self.search_edit)
+        self.immeuble_filter = QComboBox()
+        self.immeuble_filter.setMinimumWidth(200)
+        filter_layout.addWidget(self.immeuble_filter)
         
         filter_layout.addStretch()
         
@@ -101,8 +105,10 @@ class LocataireView(BaseView):
         self.btn_delete.clicked.connect(self.on_delete)
         self.btn_configure_tree.clicked.connect(self.on_configure_tree)
         self.btn_browse_docs.clicked.connect(self.on_browse_documents)
-        self.statut_combo.currentIndexChanged.connect(self.load_data)
+        self.statut_combo.currentIndexChanged.connect(lambda idx: self.load_data())
+        self.immeuble_filter.currentIndexChanged.connect(lambda idx: self.load_data())
         self.search_edit.textChanged.connect(self.on_search)
+        self.load_immeubles()
         self.table_helper = TableSelectionHelper(
             self.table, self,
             on_edit_callback=self._on_edit_items,
@@ -111,24 +117,95 @@ class LocataireView(BaseView):
         )
         self.load_data()
         
-    def load_data(self):
+    def load_immeubles(self):
+        try:
+            from app.database.connection import get_database
+            from app.models.entities import Immeuble
+            
+            db = get_database()
+            with db.session_scope() as session:
+                immeubles = session.query(Immeuble).order_by(Immeuble.nom).all()
+                
+                # Block signals to prevent triggering load_data during initialization
+                self.immeuble_filter.blockSignals(True)
+                current_data = self.immeuble_filter.currentData()
+                self.immeuble_filter.clear()
+                self.immeuble_filter.addItem("Tous les immeubles", None)
+                for immeuble in immeubles:
+                    self.immeuble_filter.addItem(immeuble.nom, immeuble.id)
+                # Restore previous selection if it still exists
+                if current_data is not None:
+                    idx = self.immeuble_filter.findData(current_data)
+                    if idx >= 0:
+                        self.immeuble_filter.setCurrentIndex(idx)
+                self.immeuble_filter.blockSignals(False)
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur", f"Erreur lors du chargement des immeubles: {str(e)}")
+            
+    def load_data(self, search_text: str = None):
         if self._is_loading:
             return
         self._is_loading = True
         try:
             from app.database.connection import get_database
-            from app.models.entities import Locataire, StatutLocataire
-            from sqlalchemy import or_
+            from app.models.entities import Locataire, StatutLocataire, Contrat, Bureau, Immeuble, contrat_bureau
+            from sqlalchemy import or_, func, exists
             from sqlalchemy.orm import joinedload
             
             db = get_database()
             
             with db.session_scope() as session:
-                query = session.query(Locataire).options(joinedload(Locataire.contrats), joinedload(Locataire.paiements))
+                # Start with base query - don't eager load to avoid conflicts with filtering
+                query = session.query(Locataire)
                 
                 statut = self.statut_combo.currentData()
                 if statut:
                     query = query.filter(Locataire.statut == StatutLocataire[statut.upper()])
+                
+                immeuble_id = self.immeuble_filter.currentData()
+                if immeuble_id:
+                    # Filter locataires who have at least one contract with bureaux in the selected immeuble
+                    # Use a simple exists subquery without complex joins
+                    locataire_has_contract_in_immeuble = session.query(Contrat.id).join(
+                        contrat_bureau, Contrat.id == contrat_bureau.c.contrat_id
+                    ).join(
+                        Bureau, contrat_bureau.c.bureau_id == Bureau.id
+                    ).filter(
+                        Contrat.Locataire_id == Locataire.id
+                    ).filter(
+                        Bureau.immeuble_id == immeuble_id
+                    ).exists()
+                    
+                    query = query.filter(locataire_has_contract_in_immeuble)
+                
+                # Search text filtering
+                if search_text is None:
+                    search_text = self.search_edit.text().strip()
+                
+                if search_text:
+                    search_pattern = f"%{search_text}%"
+                    # Search in locataire fields and immeuble names
+                    # Create exists subquery to search in immeuble names through contracts
+                    has_matching_immeuble = session.query(Contrat.id).join(
+                        contrat_bureau, Contrat.id == contrat_bureau.c.contrat_id
+                    ).join(
+                        Bureau, contrat_bureau.c.bureau_id == Bureau.id
+                    ).join(
+                        Immeuble, Bureau.immeuble_id == Immeuble.id
+                    ).filter(
+                        Contrat.Locataire_id == Locataire.id
+                    ).filter(
+                        Immeuble.nom.ilike(search_pattern)
+                    ).exists()
+                    
+                    query = query.filter(
+                        or_(
+                            Locataire.nom.ilike(search_pattern),
+                            Locataire.email.ilike(search_pattern),
+                            Locataire.cin.ilike(search_pattern),
+                            has_matching_immeuble
+                        )
+                    ).distinct()
                     
                 locataires = query.order_by(Locataire.nom).all()
                 
@@ -276,14 +353,8 @@ class LocataireView(BaseView):
                 QMessageBox.critical(self, "Erreur", f"Erreur: {str(e)}")
             
     def on_search(self, text):
-        for row in range(self.table.rowCount()):
-            match = False
-            for col in range(self.table.columnCount() - 1):
-                item = self.table.item(row, col)
-                if item and text.lower() in item.text().lower():
-                    match = True
-                    break
-            self.table.setRowHidden(row, not match)
+        # Database-driven search - reload data with search filter
+        self.load_data(search_text=text)
             
     def on_configure_tree(self):
         try:

@@ -44,19 +44,27 @@ class PaiementView(BaseView):
         
         filter_layout = QHBoxLayout()
         
-        self.contrat_combo = QComboBox()
-        self.contrat_combo.setMinimumWidth(200)
-        self.contrat_combo.addItem("Tous les contrats", None)
-        filter_layout.addWidget(self.contrat_combo)
+        self.search_edit = QLineEdit()
+        self.search_edit.setPlaceholderText("Rechercher par immeuble, locataire, montant...")
+        self.search_edit.setMinimumWidth(250)
+        filter_layout.addWidget(self.search_edit)
+        
+        self.immeuble_filter = QComboBox()
+        self.immeuble_filter.setMinimumWidth(180)
+        self.immeuble_filter.addItem("Tous les immeubles", None)
+        filter_layout.addWidget(QLabel("Immeuble:"))
+        filter_layout.addWidget(self.immeuble_filter)
+        
+        self.locataire_filter = QComboBox()
+        self.locataire_filter.setMinimumWidth(180)
+        self.locataire_filter.addItem("Tous les locataires", None)
+        filter_layout.addWidget(QLabel("Locataire:"))
+        filter_layout.addWidget(self.locataire_filter)
         
         self.type_combo = QComboBox()
         self.type_combo.addItem("Tous les types", None)
+        filter_layout.addWidget(QLabel("Type:"))
         filter_layout.addWidget(self.type_combo)
-        
-        self.search_edit = QLineEdit()
-        self.search_edit.setPlaceholderText("Rechercher...")
-        self.search_edit.setMinimumWidth(200)
-        filter_layout.addWidget(self.search_edit)
         
         filter_layout.addStretch()
         
@@ -122,10 +130,12 @@ class PaiementView(BaseView):
         self.btn_receipt.clicked.connect(self.on_receipt)
         self.btn_configure_tree.clicked.connect(self.on_configure_tree)
         self.btn_browse_docs.clicked.connect(self.on_browse_documents)
-        self.contrat_combo.currentIndexChanged.connect(self.load_data)
+        self.immeuble_filter.currentIndexChanged.connect(self.on_immeuble_changed)
+        self.locataire_filter.currentIndexChanged.connect(self.load_data)
         self.type_combo.currentIndexChanged.connect(self.load_data)
-        self.search_edit.textChanged.connect(self.on_search)
-        self.load_contrats()
+        self.search_edit.textChanged.connect(self.load_data)
+        self.load_immeubles()
+        self.load_locataires_for_filter()
         self.table_helper = TableSelectionHelper(
             self.table, self,
             on_edit_callback=self._on_edit_items,
@@ -141,22 +151,64 @@ class PaiementView(BaseView):
         self._is_loading = True
         try:
             from app.database.connection import get_database
-            from app.models.entities import Paiement, Locataire, Contrat, TypePaiement
-            from sqlalchemy import or_
+            from app.models.entities import Paiement, Locataire, Contrat, TypePaiement, Bureau, Immeuble, contrat_bureau
+            from sqlalchemy import or_, cast, String
             from sqlalchemy.orm import joinedload
             
             db = get_database()
             
             with db.session_scope() as session:
-                query = session.query(Paiement).options(joinedload(Paiement.locataire), joinedload(Paiement.contrat)).join(Locataire).outerjoin(Contrat)
+                # Base query without eager loading to avoid conflicts
+                query = session.query(Paiement).join(Locataire).outerjoin(Contrat)
                 
-                contrat_id = self.contrat_combo.currentData()
-                if contrat_id:
-                    query = query.filter(Paiement.contrat_id == contrat_id)
+                # Apply immeuble filter
+                # Filter payments by the immeuble of the bureaux attached to their contract
+                immeuble_id = self.immeuble_filter.currentData()
+                if immeuble_id:
+                    # Use exists subquery to filter payments where contract has bureaux in selected immeuble
+                    contract_in_immeuble = session.query(Bureau.id).join(
+                        contrat_bureau, Bureau.id == contrat_bureau.c.bureau_id
+                    ).filter(
+                        contrat_bureau.c.contrat_id == Paiement.contrat_id
+                    ).filter(
+                        Bureau.immeuble_id == immeuble_id
+                    ).exists()
+                    query = query.filter(contract_in_immeuble)
+                
+                # Apply locataire filter
+                locataire_id = self.locataire_filter.currentData()
+                if locataire_id:
+                    query = query.filter(Paiement.Locataire_id == locataire_id)
                     
+                # Apply type filter
                 type_paiement = self.type_combo.currentData()
                 if type_paiement is not None:
                     query = query.filter(Paiement.type_paiement == TypePaiement[type_paiement])
+                
+                # Apply search text filter
+                search_text = self.search_edit.text().strip().lower()
+                if search_text:
+                    search_pattern = f"%{search_text}%"
+                    # Create exists subquery to search in immeuble names through contract's bureaux
+                    has_matching_immeuble = session.query(Bureau.id).join(
+                        contrat_bureau, Bureau.id == contrat_bureau.c.bureau_id
+                    ).join(
+                        Immeuble, Bureau.immeuble_id == Immeuble.id
+                    ).filter(
+                        contrat_bureau.c.contrat_id == Paiement.contrat_id
+                    ).filter(
+                        Immeuble.nom.ilike(search_pattern)
+                    ).exists()
+                    
+                    query = query.filter(
+                        or_(
+                            Locataire.nom.ilike(search_pattern),
+                            has_matching_immeuble,
+                            cast(Paiement.contrat_id, String).ilike(search_pattern),
+                            cast(Paiement.montant_total, String).ilike(search_pattern),
+                            Paiement.commentaire.ilike(search_pattern)
+                        )
+                    )
                     
                 paiements = query.order_by(Paiement.date_paiement.desc()).all()
                 
@@ -189,46 +241,80 @@ class PaiementView(BaseView):
                             Qt.ItemIsSelectable | Qt.ItemIsEnabled
                         )
                                         
-                self.load_contrats()
                 self.load_types()
                 
         except Exception as e:
             QMessageBox.critical(self, "Erreur", f"Erreur: {str(e)}")
         finally:
             self._is_loading = False
-            
-    def load_contrats(self):
+    
+    def load_immeubles(self):
+        """Load all immeubles into the filter combo"""
         try:
             from app.database.connection import get_database
-            from app.models.entities import Contrat
+            from app.models.entities import Immeuble
+            
+            db = get_database()
+            with db.session_scope() as session:
+                immeubles = session.query(Immeuble).order_by(Immeuble.nom).all()
+                
+                current_data = self.immeuble_filter.currentData()
+                self.immeuble_filter.blockSignals(True)
+                self.immeuble_filter.clear()
+                self.immeuble_filter.addItem("Tous les immeubles", None)
+                
+                for immeuble in immeubles:
+                    self.immeuble_filter.addItem(immeuble.nom, immeuble.id)
+                    
+                if current_data is not None:
+                    idx = self.immeuble_filter.findData(current_data)
+                    if idx >= 0:
+                        self.immeuble_filter.setCurrentIndex(idx)
+                self.immeuble_filter.blockSignals(False)
+                        
+        except Exception as e:
+            print(f"Erreur loading immeubles: {e}")
+    
+    def load_locataires_for_filter(self, immeuble_id=None):
+        """Load locataires into filter, optionally filtered by immeuble"""
+        try:
+            from app.database.connection import get_database
+            from app.models.entities import Locataire, Contrat, Bureau
             from sqlalchemy.orm import joinedload
             
             db = get_database()
             with db.session_scope() as session:
-                contrats = session.query(Contrat).options(
-                    joinedload(Contrat.locataire),
-                    joinedload(Contrat.bureaux)
-                ).order_by(Contrat.date_debut.desc()).all()
+                query = session.query(Locataire).distinct()
                 
-                current_data = self.contrat_combo.currentData()
-                self.contrat_combo.blockSignals(True)
-                self.contrat_combo.clear()
-                self.contrat_combo.addItem("Tous les contrats", None)
+                # If immeuble selected, only show locataires with contracts in that immeuble
+                if immeuble_id:
+                    query = query.join(Contrat).join(Contrat.bureaux).filter(Bureau.immeuble_id == immeuble_id)
                 
-                for ctr in contrats:
-                    loc_name = ctr.locataire.nom if ctr.locataire else "N/A"
-                    bureaux_nums = ", ".join([b.numero for b in ctr.bureaux]) if ctr.bureaux else "N/A"
-                    display_text = f"#{ctr.id} - {loc_name} (Bureaux: {bureaux_nums})"
-                    self.contrat_combo.addItem(display_text, ctr.id)
+                locataires = query.order_by(Locataire.nom).all()
+                
+                current_data = self.locataire_filter.currentData()
+                self.locataire_filter.blockSignals(True)
+                self.locataire_filter.clear()
+                self.locataire_filter.addItem("Tous les locataires", None)
+                
+                for loc in locataires:
+                    self.locataire_filter.addItem(loc.nom, loc.id)
                     
+                # Restore selection if still valid
                 if current_data is not None:
-                    idx = self.contrat_combo.findData(current_data)
+                    idx = self.locataire_filter.findData(current_data)
                     if idx >= 0:
-                        self.contrat_combo.setCurrentIndex(idx)
-                self.contrat_combo.blockSignals(False)
+                        self.locataire_filter.setCurrentIndex(idx)
+                self.locataire_filter.blockSignals(False)
                         
         except Exception as e:
-            print(f"Erreur: {e}")
+            print(f"Erreur loading locataires: {e}")
+    
+    def on_immeuble_changed(self):
+        """When immeuble filter changes, update locataire filter and reload data"""
+        immeuble_id = self.immeuble_filter.currentData()
+        self.load_locataires_for_filter(immeuble_id)
+        self.load_data()
             
     def load_types(self):
         if self.type_combo.count() <= 1:
@@ -380,10 +466,8 @@ class PaiementView(BaseView):
             )
             
     def on_search(self, text):
-        for row in range(self.table.rowCount()):
-            match = False
-        for col in range(self.table.columnCount()):
-                item.setFlags(Qt.ItemIsSelectable | Qt.ItemIsEnabled)
+        """Search is now integrated into load_data via textChanged signal"""
+        self.load_data()
                 
     def on_configure_tree(self):
         try:

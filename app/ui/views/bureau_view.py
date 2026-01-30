@@ -41,6 +41,11 @@ class BureauView(QWidget):
         
         filter_layout = QHBoxLayout()
         
+        self.search_edit = QLineEdit()
+        self.search_edit.setPlaceholderText("Rechercher...")
+        self.search_edit.setMinimumWidth(200)
+        filter_layout.addWidget(self.search_edit)
+        
         self.immeuble_combo = QComboBox()
         self.immeuble_combo.setMinimumWidth(200)
         self.immeuble_combo.addItem("Tous les immeubles", None)
@@ -97,6 +102,7 @@ class BureauView(QWidget):
         self.btn_browse_docs.clicked.connect(self.on_browse_documents)
         self.immeuble_combo.currentIndexChanged.connect(self.load_data)
         self.disponible_combo.currentIndexChanged.connect(self.load_data)
+        self.search_edit.textChanged.connect(self.on_search)
 
         self.table_helper = TableSelectionHelper(
             self.table, self,
@@ -148,6 +154,21 @@ class BureauView(QWidget):
                     
         except Exception as e:
             QMessageBox.critical(self, "Erreur", f"Erreur: {str(e)}")
+    
+    def on_search(self, text: str):
+        """Filter table rows based on search text matching any column"""
+        search_text = text.lower().strip()
+        
+        for row in range(self.table.rowCount()):
+            match_found = False
+            
+            for col in range(self.table.columnCount()):
+                item = self.table.item(row, col)
+                if item and search_text in item.text().lower():
+                    match_found = True
+                    break
+            
+            self.table.setRowHidden(row, not match_found)
             
     def load_immeubles(self):
         try:
