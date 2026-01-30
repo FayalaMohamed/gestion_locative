@@ -258,7 +258,7 @@ class DocumentBrowserDialog(QDialog):
         for doc in docs:
             item = QListWidgetItem()
             icon = self._get_file_icon(doc.get("file_type", ""))
-            file_name = doc.get("original_name", doc.get("filename", ""))
+            file_name = doc.get("filename", doc.get("original_name", ""))
             size = doc.get("file_size", 0)
             size_str = self._format_size(size) if size else ""
 
@@ -326,7 +326,7 @@ class DocumentBrowserDialog(QDialog):
 
         item = selected[0]
         doc = item.data(Qt.ItemDataRole.UserRole)
-        current_name = doc.get("original_name", "")
+        current_name = doc.get("filename", doc.get("original_name", ""))
         current_id = doc.get("id")
 
         new_name, ok = QInputDialog.getText(
@@ -339,16 +339,17 @@ class DocumentBrowserDialog(QDialog):
         if ok and new_name.strip():
             new_name = new_name.strip()
             if new_name.lower() == current_name.lower():
-                return
-                
+                return()
+                 
             if self._file_exists_in_current_folder(new_name, current_id):
                 QMessageBox.warning(self, "Erreur", f"Un fichier nommé '{new_name}' existe déjà dans ce dossier.")
                 return
-                
+                 
             try:
-                self.doc_service.update_document(
+                # Update both the filename and original_name to maintain consistency
+                self.doc_service.rename_document(
                     current_id,
-                    original_name=new_name
+                    new_name
                 )
                 self.load_documents()
             except Exception as e:
@@ -356,8 +357,9 @@ class DocumentBrowserDialog(QDialog):
 
     def _file_exists_in_current_folder(self, filename: str, exclude_id: int) -> bool:
         for doc in self.documents:
-            if doc.get("id") != exclude_id and doc.get("original_name", "").lower() == filename.lower():
-                return True
+            if doc.get("id") != exclude_id:
+                if doc.get("original_name", "").lower() == filename.lower() or doc.get("filename", "").lower() == filename.lower():
+                    return True
         return False
 
     def delete_selected_document(self):
@@ -367,7 +369,7 @@ class DocumentBrowserDialog(QDialog):
             return
 
         doc = selected[0].data(Qt.ItemDataRole.UserRole)
-        file_name = doc.get("original_name", "ce document")
+        file_name = doc.get("filename", doc.get("original_name", "ce document"))
 
         reply = QMessageBox.question(
             self, "Confirmer la suppression",

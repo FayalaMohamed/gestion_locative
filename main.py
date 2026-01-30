@@ -74,7 +74,7 @@ class MainWindow(QMainWindow):
         sidebar_layout.addWidget(self.sidebar)
         
         separator = QFrame()
-        separator.setFrameShape(QFrame.HLine)
+        separator.setFrameShape(QFrame.Shape.HLine)
         separator.setStyleSheet("background-color: #34495e; max-height: 1px;")
         separator.setFixedHeight(1)
         sidebar_layout.addWidget(separator)
@@ -109,19 +109,76 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.content)
         
         self.dashboard = DashboardView()
+        self.dashboard = DashboardView()
         self.content.addWidget(self.dashboard)
-        self.content.addWidget(ImmeubleView())
-        self.content.addWidget(BureauView())
-        self.content.addWidget(LocataireView())
-        self.content.addWidget(ContratView())
-        self.content.addWidget(PaiementView())
-        self.content.addWidget(AuditView())
-        self.content.addWidget(SettingsView())
         
-        self.sidebar.currentRowChanged.connect(self.content.setCurrentIndex)
-        self.sidebar.currentRowChanged.connect(lambda _: self.sidebar_bottom.setCurrentRow(-1))
-        self.sidebar_bottom.currentRowChanged.connect(lambda row: self.content.setCurrentIndex(6 + row))
-        self.sidebar_bottom.currentRowChanged.connect(lambda _: self.sidebar.setCurrentRow(-1))
+        self.immeuble_view = ImmeubleView()
+        self.content.addWidget(self.immeuble_view)
+        
+        self.bureau_view = BureauView()
+        self.content.addWidget(self.bureau_view)
+        
+        self.locataire_view = LocataireView()
+        self.content.addWidget(self.locataire_view)
+        
+        self.contrat_view = ContratView()
+        self.content.addWidget(self.contrat_view)
+        
+        self.paiement_view = PaiementView()
+        self.content.addWidget(self.paiement_view)
+        
+        self.audit_view = AuditView()
+        self.content.addWidget(self.audit_view)
+        
+        self.settings_view = SettingsView()
+        self.content.addWidget(self.settings_view)
+        
+        # Connect data changed signals to auto-refresh
+        self.immeuble_view.data_changed.connect(self.refresh_current_view)
+        self.locataire_view.data_changed.connect(self.refresh_current_view)
+        self.contrat_view.data_changed.connect(self.refresh_current_view)
+        self.paiement_view.data_changed.connect(self.refresh_current_view)
+        # Also connect payment changes to refresh contract details specifically
+        self.paiement_view.data_changed.connect(self.contrat_view.refresh_current_contract_details)
+        
+        self.sidebar.currentRowChanged.connect(self._on_sidebar_changed)
+        self.sidebar_bottom.currentRowChanged.connect(self._on_bottom_sidebar_changed)
+        
+    def _on_sidebar_changed(self, row):
+        """Handle main sidebar selection change"""
+        # Only process if a valid row is selected
+        if row >= 0:
+            # Clear bottom sidebar selection without triggering its signal
+            self.sidebar_bottom.blockSignals(True)
+            self.sidebar_bottom.setCurrentRow(-1)
+            self.sidebar_bottom.blockSignals(False)
+            # Navigate to the selected page
+            self.content.setCurrentIndex(row)
+            self.refresh_current_view()
+    
+    def _on_bottom_sidebar_changed(self, row):
+        """Handle bottom sidebar selection change"""
+        # Only process if a valid row is selected
+        if row >= 0:
+            # Clear main sidebar selection without triggering its signal
+            self.sidebar.blockSignals(True)
+            self.sidebar.setCurrentRow(-1)
+            self.sidebar.blockSignals(False)
+            # Navigate to the selected page (offset by 6 for bottom items)
+            self.content.setCurrentIndex(6 + row)
+            self.refresh_current_view()
+        
+    def refresh_current_view(self):
+        """Refresh the currently active view"""
+        current_widget = self.content.currentWidget()
+        if hasattr(current_widget, 'load_data'):
+            current_widget.load_data()
+        elif hasattr(current_widget, 'refresh_data'):
+            current_widget.refresh_data()
+        
+        # Special handling for contract view - refresh details if a contract is selected
+        if current_widget == self.contrat_view and hasattr(current_widget, 'refresh_current_contract_details'):
+            current_widget.refresh_current_contract_details()
         
     def refresh_dashboard(self):
         pass

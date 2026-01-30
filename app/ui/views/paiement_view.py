@@ -6,15 +6,17 @@ import calendar
 import os
 from datetime import date
 
-from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
+from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                                QPushButton, QTableWidget, QTableWidgetItem,
                                QHeaderView, QLineEdit, QMessageBox, QGroupBox,
                                QFormLayout, QGridLayout, QTextEdit, QComboBox,
-                               QDateEdit, QDoubleSpinBox, QSpinBox, QFileDialog)
+                               QDateEdit, QDoubleSpinBox, QSpinBox, QFileDialog,
+                               QDialog)
 from PySide6.QtCore import Qt, Signal, QDate
 from PySide6.QtGui import QFont, QColor
 
-from app.ui.views.base_view import BaseView
+from typing import List
+from app.ui.views.base_view import BaseView, TableSelectionHelper
 from app.services.receipt_service import ReceiptService
 from app.services.audit_service import AuditService
 
@@ -72,7 +74,6 @@ class PaiementView(BaseView):
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.table.verticalHeader().setVisible(False)
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.table.setSelectionMode(QTableWidget.SingleSelection)
         
         table_layout.addWidget(self.table)
         
@@ -125,6 +126,12 @@ class PaiementView(BaseView):
         self.type_combo.currentIndexChanged.connect(self.load_data)
         self.search_edit.textChanged.connect(self.on_search)
         self.load_contrats()
+        self.table_helper = TableSelectionHelper(
+            self.table, self,
+            on_edit_callback=self._on_edit_items,
+            on_delete_callback=self._on_delete_items,
+            entity_name="paiement"
+        )
         self.load_data()
         
 
@@ -275,6 +282,51 @@ class PaiementView(BaseView):
                 self.data_changed.emit()
             except Exception as e:
                 QMessageBox.critical(self, "Erreur", f"Erreur: {str(e)}")
+
+    def _on_edit_items(self, item_ids: List[int]):
+        """Handle edit action from context menu or keyboard."""
+        if len(item_ids) == 1:
+            dialog = PaiementDialog(self, paiement_id=item_ids[0])
+            if dialog.exec() == QDialog.Accepted:
+                self.load_data()
+                self.data_changed.emit()
+        else:
+            QMessageBox.information(self, "Information", 
+                "Veuillez sélectionner un seul paiement pour la modification.")
+
+    def _on_delete_items(self, item_ids: List[int]):
+        """Handle delete action from context menu or keyboard."""
+        if not item_ids:
+            return
+
+        count = len(item_ids)
+        reply = QMessageBox.question(self, "Confirmation",
+            f"Êtes-vous sûr de vouloir supprimer {count} paiement{'s' if count > 1 else ''}?",
+            QMessageBox.Yes | QMessageBox.No)
+
+        if reply == QMessageBox.Yes:
+            try:
+                from app.database.connection import get_database
+                from app.models.entities import Paiement
+                from app.repositories.paiement_repository import PaiementRepository
+
+                db = get_database()
+                deleted_count = 0
+
+                with db.session_scope() as session:
+                    repo = PaiementRepository(session)
+
+                    for item_id in item_ids:
+                        p = repo.get_by_id(item_id)
+                        if p:
+                            repo.delete(p)
+                            deleted_count += 1
+
+                self.load_data()
+                self.data_changed.emit()
+
+            except Exception as e:
+                QMessageBox.critical(self, "Erreur", f"Erreur: {str(e)}")
                 
     def on_receipt(self):
         selected = self.table.selectedItems()
@@ -284,12 +336,25 @@ class PaiementView(BaseView):
 
         paiement_id = int(self.table.item(selected[0].row(), 0).text())
 
+        # Show receipt options dialog
+        from app.ui.dialogs.receipt_options_dialog import ReceiptOptionsDialog
+        options_dialog = ReceiptOptionsDialog(self)
+        
+        if options_dialog.exec() != QDialog.Accepted:
+            return
+        
+        options = options_dialog.get_options()
+
         try:
             from app.database.connection import get_database
             db = get_database()
             with db.session_scope() as session:
                 service = ReceiptService(session)
-                pdf_content, receipt_number = service.generate_receipt(paiement_id)
+                pdf_content, receipt_number = service.generate_receipt(
+                    paiement_id,
+                    company_name=options['company_name'],
+                    signature_path=options['signature_path']
+                )
 
                 file_path, _ = QFileDialog.getSaveFileName(
                     self,

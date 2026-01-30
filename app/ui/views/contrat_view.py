@@ -11,7 +11,9 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
 from PySide6.QtCore import Qt, Signal, QSize, QDate
 from PySide6.QtGui import QFont, QColor
 
-from app.ui.views.base_view import BaseView
+from typing import List
+
+from app.ui.views.base_view import BaseView, TableSelectionHelper
 
 
 class ContratView(BaseView):
@@ -20,6 +22,7 @@ class ContratView(BaseView):
     
     def setup_ui(self):
         super().setup_ui()
+        self._current_contrat_id = None
         
         header_layout = QHBoxLayout()
         
@@ -66,7 +69,6 @@ class ContratView(BaseView):
         self.table.setColumnCount(6)
         self.table.setHorizontalHeaderLabels(["ID", "Locataire", "Bureaux", "Date Début", "Mensuel", "Statut"])
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.table.setSelectionMode(QTableWidget.SingleSelection)
         self.table.setAlternatingRowColors(True)
         self.table.setShowGrid(False)
         self.table.verticalHeader().setVisible(False)
@@ -135,10 +137,19 @@ class ContratView(BaseView):
         self.btn_configure_tree.clicked.connect(self.on_configure_tree)
         self.btn_browse_docs.clicked.connect(self.on_browse_documents)
         self.table.itemSelectionChanged.connect(self.on_selection_changed)
+        self.table.itemDoubleClicked.connect(self.on_item_double_clicked)
         self.locataire_combo.currentIndexChanged.connect(self.load_data)
         self.statut_combo.currentIndexChanged.connect(self.load_data)
-        self.load_data()
-        self.on_selection_changed()
+        # Connect data changed signals to auto-refresh
+        self.data_changed.connect(self.refresh_current_contract_details)
+        
+        # Initialize table selection helper for multi-selection support
+        self.table_helper = TableSelectionHelper(
+            self.table, self,
+            on_edit_callback=self._on_edit_items,
+            on_delete_callback=self._on_delete_items,
+            entity_name="contrat"
+        )
         
     def load_data(self):
         if self._is_loading:
@@ -584,15 +595,96 @@ class ContratView(BaseView):
             except Exception as e:
                 QMessageBox.critical(self, "Erreur", f"Erreur: {str(e)}")
                 
+    def _on_edit_items(self, item_ids: List[int]):
+        """Handle edit action from context menu or keyboard."""
+        if len(item_ids) == 1:
+            dialog = ContratDialog(self, contrat_id=item_ids[0])
+            if dialog.exec() == QDialog.Accepted:
+                self.load_data()
+                self.data_changed.emit()
+        else:
+            QMessageBox.information(self, "Information", 
+                "Veuillez sélectionner un seul contrat pour la modification.")
+
+    def _on_delete_items(self, item_ids: List[int]):
+        """Handle delete action from context menu or keyboard."""
+        if not item_ids:
+            return
+
+        count = len(item_ids)
+        reply = QMessageBox.question(self, "Confirmation",
+            f"Êtes-vous sûr de vouloir supprimer {count} contrat{'s' if count > 1 else ''}?",
+            QMessageBox.Yes | QMessageBox.No)
+
+        if reply == QMessageBox.Yes:
+            try:
+                from app.database.connection import get_database
+                from app.models.entities import Contrat, Paiement, Locataire, StatutLocataire
+                from app.repositories.contrat_repository import ContratRepository
+                from sqlalchemy import func
+
+                db = get_database()
+                deleted_count = 0
+                skipped_count = 0
+
+                with db.session_scope() as session:
+                    repo = ContratRepository(session)
+
+                    for item_id in item_ids:
+                        ctr = repo.get_by_id(item_id)
+                        if ctr:
+                            paiement_count = session.query(func.count(Paiement.id)).filter(Paiement.contrat_id == item_id).scalar()
+
+                            if paiement_count > 0:
+                                skipped_count += 1
+                                continue
+
+                            loc_id = ctr.Locataire_id
+                            repo.delete(ctr)
+                            deleted_count += 1
+
+                            active_count = session.query(func.count(Contrat.id)).filter(
+                                Contrat.Locataire_id == loc_id,
+                                Contrat.est_resilie_col == False
+                            ).scalar()
+                            if active_count == 0:
+                                loc = session.query(Locataire).get(loc_id)
+                                if loc:
+                                    loc.statut = StatutLocataire.HISTORIQUE
+
+                self.load_data()
+                self.data_changed.emit()
+
+                if skipped_count > 0:
+                    QMessageBox.warning(self, "Suppression partielle",
+                        f"{deleted_count} contrat(s) supprimé(s), {skipped_count} non supprimé(s) car ils ont des paiements associés.")
+
+            except Exception as e:
+                QMessageBox.critical(self, "Erreur", f"Erreur: {str(e)}")
+                
     def on_selection_changed(self):
         selected = self.table.selectedItems()
         self.btn_browse_docs.setEnabled(bool(selected))
         if not selected:
             self.clear_details()
+            self._current_contrat_id = None
             return
-            
+             
         item_id = int(self.table.item(selected[0].row(), 0).text())
+        self._current_contrat_id = item_id
         self.show_details(item_id)
+        
+    def on_item_double_clicked(self, item):
+        """Handle double-click on contract table item"""
+        if item:
+            row = item.row()
+            item_id = int(self.table.item(row, 0).text())
+            self.show_details(item_id)
+            
+    def refresh_current_contract_details(self):
+        """Refresh the details of the currently selected contract"""
+        if self._current_contrat_id is not None:
+            self.show_details(self._current_contrat_id)
         
     def on_configure_tree(self):
         try:

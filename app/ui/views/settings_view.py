@@ -10,8 +10,9 @@ from typing import Any, Dict, Optional
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QGroupBox, QFormLayout, QFileDialog, QMessageBox, QProgressBar,
-    QTextEdit, QLineEdit
+    QTextEdit, QLineEdit, QListWidget, QListWidgetItem, QInputDialog
 )
+from PySide6.QtGui import QPixmap
 from PySide6.QtCore import Qt, QTimer
 
 from app.ui.views.base_view import BaseView
@@ -61,21 +62,37 @@ class SettingsView(BaseView):
         import_group.setLayout(import_layout)
         self.layout().addWidget(import_group)
 
-        signature_group = QGroupBox("Signature sur les reçus")
-        signature_layout = QFormLayout()
+        signature_group = QGroupBox("Signatures sur les reçus")
+        signature_layout = QVBoxLayout()
+
+        # Signatures list
+        self.signatures_list = QListWidget()
+        self.signatures_list.setMaximumHeight(120)
+        signature_layout.addWidget(QLabel("Signatures enregistrées:"))
+        signature_layout.addWidget(self.signatures_list)
+
+        # Signature preview
+        self.signature_preview_label = QLabel("Sélectionnez une signature pour l'aperçu")
+        self.signature_preview_label.setAlignment(Qt.AlignCenter)
+        self.signature_preview_label.setMinimumHeight(60)
+        self.signature_preview_label.setStyleSheet("border: 1px solid #bdc3c7; background-color: #ecf0f1; color: #7f8c8d;")
+        signature_layout.addWidget(QLabel("Aperçu:"))
+        signature_layout.addWidget(self.signature_preview_label)
+
+        # Buttons
+        sig_buttons_layout = QHBoxLayout()
 
         self.btn_import_signature = QPushButton("Importer une signature...")
-        self.btn_import_signature.setStyleSheet("background-color: #9b59b6; color: white; padding: 12px 24px; border-radius: 4px; border: none;")
-        signature_layout.addRow("", self.btn_import_signature)
+        self.btn_import_signature.setStyleSheet("background-color: #9b59b6; color: white; padding: 8px 16px; border-radius: 4px; border: none;")
+        sig_buttons_layout.addWidget(self.btn_import_signature)
 
-        self.signature_path_label = QLabel("Aucune signature importée")
-        self.signature_path_label.setStyleSheet("color: #7f8c8d; font-size: 13px;")
-        signature_layout.addRow("", self.signature_path_label)
+        self.btn_delete_signature = QPushButton("Supprimer")
+        self.btn_delete_signature.setStyleSheet("background-color: #e74c3c; color: white; padding: 8px 16px; border-radius: 4px; border: none;")
+        self.btn_delete_signature.setEnabled(False)
+        sig_buttons_layout.addWidget(self.btn_delete_signature)
 
-        self.btn_clear_signature = QPushButton("Supprimer la signature")
-        self.btn_clear_signature.setStyleSheet("background-color: #e74c3c; color: white; padding: 8px 16px; border-radius: 4px; border: none;")
-        self.btn_clear_signature.setEnabled(False)
-        signature_layout.addRow("", self.btn_clear_signature)
+        sig_buttons_layout.addStretch()
+        signature_layout.addLayout(sig_buttons_layout)
 
         signature_group.setLayout(signature_layout)
         self.layout().addWidget(signature_group)
@@ -132,7 +149,8 @@ class SettingsView(BaseView):
         self.btn_export.clicked.connect(self.on_export)
         self.btn_import.clicked.connect(self.on_import)
         self.btn_import_signature.clicked.connect(self.on_import_signature)
-        self.btn_clear_signature.clicked.connect(self.on_clear_signature)
+        self.btn_delete_signature.clicked.connect(self.on_delete_signature)
+        self.signatures_list.currentRowChanged.connect(self.on_signature_selected)
         self.btn_save_credentials.clicked.connect(self.on_save_credentials)
         self.btn_google_auth.clicked.connect(self.on_google_auth)
         self.btn_google_backup.clicked.connect(self.on_google_backup)
@@ -242,19 +260,29 @@ class SettingsView(BaseView):
             )
 
     def _load_signature_status(self):
+        """Load all signatures into the list widget"""
         import os
         config = Config.get_instance()
-        signature_path = config.get('receipts', 'signature_path', default='')
-        if signature_path and os.path.exists(signature_path):
-            self.signature_path_label.setText(signature_path)
-            self.signature_path_label.setStyleSheet("color: #27ae60; font-size: 13px;")
-            self.btn_clear_signature.setEnabled(True)
-        else:
-            self.signature_path_label.setText("Aucune signature importée")
-            self.signature_path_label.setStyleSheet("color: #7f8c8d; font-size: 13px;")
-            self.btn_clear_signature.setEnabled(False)
+        
+        self.signatures_list.clear()
+        signatures = config.get_signatures()
+        
+        for sig in signatures:
+            name = sig.get('name', 'Signature sans nom')
+            path = sig.get('path', '')
+            item = QListWidgetItem(name)
+            item.setToolTip(path if os.path.exists(path) else f"{path} (fichier non trouvé)")
+            self.signatures_list.addItem(item)
+        
+        # Disable delete button if no selection
+        self.btn_delete_signature.setEnabled(False)
+        self.signature_preview_label.setText("Sélectionnez une signature pour l'aperçu")
+        self.signature_preview_label.setStyleSheet("border: 1px solid #bdc3c7; background-color: #ecf0f1; color: #7f8c8d;")
 
     def on_import_signature(self):
+        """Import a signature and add it to the list"""
+        import os
+        
         file_path, _ = QFileDialog.getOpenFileName(
             self,
             "Importer une signature",
@@ -265,32 +293,47 @@ class SettingsView(BaseView):
         if not file_path:
             return
 
+        # Ask for signature name
+        default_name = os.path.splitext(os.path.basename(file_path))[0]
+        name, ok = QInputDialog.getText(
+            self,
+            "Nom de la signature",
+            "Entrez un nom pour cette signature:",
+            text=default_name
+        )
+
+        if not ok or not name.strip():
+            name = default_name
+
         config = Config.get_instance()
-        config.set(file_path, 'receipts', 'signature_path')
-        config.save_config()
+        config.add_signature(name.strip(), file_path)
 
         self._load_signature_status()
 
         QMessageBox.information(
             self,
             "Succès",
-            "Signature importée avec succès!\nElle sera affichée sur les nouveaux reçus."
+            f"Signature '{name}' importée avec succès!\nElle sera affichée sur les nouveaux reçus."
         )
 
-    def on_clear_signature(self):
+    def on_delete_signature(self):
+        """Delete the selected signature from the list"""
+        current_row = self.signatures_list.currentRow()
+        if current_row < 0:
+            return
+
         reply = QMessageBox.question(
             self,
             "Confirmation",
-            "Êtes-vous sûr de vouloir supprimer la signature?",
-            QMessageBox.Yes | QMessageBox.No
+            "Êtes-vous sûr de vouloir supprimer cette signature?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
 
-        if reply != QMessageBox.Yes:
+        if reply != QMessageBox.StandardButton.Yes:
             return
 
         config = Config.get_instance()
-        config.set('', 'receipts', 'signature_path')
-        config.save_config()
+        config.remove_signature(current_row)
 
         self._load_signature_status()
 
@@ -299,6 +342,48 @@ class SettingsView(BaseView):
             "Succès",
             "Signature supprimée avec succès."
         )
+
+    def on_signature_selected(self):
+        """Show preview of selected signature"""
+        import os
+        
+        current_row = self.signatures_list.currentRow()
+        if current_row < 0:
+            self.btn_delete_signature.setEnabled(False)
+            self.signature_preview_label.setText("Sélectionnez une signature pour l'aperçu")
+            self.signature_preview_label.setStyleSheet("border: 1px solid #bdc3c7; background-color: #ecf0f1; color: #7f8c8d;")
+            self.signature_preview_label.setPixmap(QPixmap())
+            return
+
+        self.btn_delete_signature.setEnabled(True)
+        
+        config = Config.get_instance()
+        signatures = config.get_signatures()
+        
+        if current_row < len(signatures):
+            sig = signatures[current_row]
+            path = sig.get('path', '')
+            
+            if os.path.exists(path):
+                pixmap = QPixmap(path)
+                if not pixmap.isNull():
+                    # Scale to fit while maintaining aspect ratio
+                    scaled_pixmap = pixmap.scaled(
+                        self.signature_preview_label.width(),
+                        self.signature_preview_label.height(),
+                        Qt.AspectRatioMode.KeepAspectRatio,
+                        Qt.TransformationMode.SmoothTransformation
+                    )
+                    self.signature_preview_label.setPixmap(scaled_pixmap)
+                    self.signature_preview_label.setStyleSheet("border: 1px solid #bdc3c7; background-color: #ffffff;")
+                else:
+                    self.signature_preview_label.setText("Erreur: Impossible de charger l'image")
+                    self.signature_preview_label.setStyleSheet("border: 1px solid #bdc3c7; background-color: #ecf0f1; color: #e74c3c;")
+                    self.signature_preview_label.setPixmap(QPixmap())
+            else:
+                self.signature_preview_label.setText(f"Fichier non trouvé:\n{path}")
+                self.signature_preview_label.setStyleSheet("border: 1px solid #bdc3c7; background-color: #ecf0f1; color: #e74c3c;")
+                self.signature_preview_label.setPixmap(QPixmap())
 
     def on_save_credentials(self):
         """Authenticate with Google Cloud credentials.
