@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                                QScrollArea, QFrame, QCheckBox)
 from PySide6.QtCore import Qt, Signal, QSize, QDate
 from PySide6.QtGui import QFont, QColor
+from PySide6.QtWidgets import QCompleter
 
 from typing import List
 
@@ -40,11 +41,25 @@ class ContratView(BaseView):
         
         filter_layout = QHBoxLayout()
         
+        # Search box
+        self.search_edit = QLineEdit()
+        self.search_edit.setPlaceholderText("Rechercher (locataire, immeuble, bureau, contrat #...)")
+        self.search_edit.setMinimumWidth(300)
+        filter_layout.addWidget(self.search_edit)
+        
+        # Immeuble filter
+        self.immeuble_filter = QComboBox()
+        self.immeuble_filter.setMinimumWidth(180)
+        self.immeuble_filter.addItem("Tous les immeubles", None)
+        filter_layout.addWidget(self.immeuble_filter)
+        
+        # Locataire filter
         self.locataire_combo = QComboBox()
         self.locataire_combo.setMinimumWidth(200)
         self.locataire_combo.addItem("Tous les locataires", None)
         filter_layout.addWidget(self.locataire_combo)
         
+        # Statut filter
         self.statut_combo = QComboBox()
         self.statut_combo.addItem("Tous les statuts", None)
         self.statut_combo.addItem("Actifs", "actif")
@@ -138,8 +153,12 @@ class ContratView(BaseView):
         self.btn_browse_docs.clicked.connect(self.on_browse_documents)
         self.table.itemSelectionChanged.connect(self.on_selection_changed)
         self.table.itemDoubleClicked.connect(self.on_item_double_clicked)
-        self.locataire_combo.currentIndexChanged.connect(self.load_data)
+        # Filter connections - two-way correlation between immeuble and locataire
+        self.immeuble_filter.currentIndexChanged.connect(self.on_immeuble_changed)
+        self.locataire_combo.currentIndexChanged.connect(self.on_locataire_changed)
         self.statut_combo.currentIndexChanged.connect(self.load_data)
+        # Search with debounce - text change triggers load_data after short delay
+        self.search_edit.textChanged.connect(self.on_search_text_changed)
         # Connect data changed signals to auto-refresh
         self.data_changed.connect(self.refresh_current_contract_details)
         
@@ -157,24 +176,68 @@ class ContratView(BaseView):
         self._is_loading = True
         try:
             from app.database.connection import get_database
-            from app.models.entities import Contrat, Locataire, Bureau
-            from sqlalchemy import or_
+            from app.models.entities import Contrat, Locataire, Bureau, Immeuble, contrat_bureau
+            from sqlalchemy import or_, func, String
             from sqlalchemy.orm import joinedload
             
             db = get_database()
             
             with db.session_scope() as session:
-                query = session.query(Contrat).options(joinedload(Contrat.locataire), joinedload(Contrat.bureaux)).join(Locataire)
+                query = session.query(Contrat).options(
+                    joinedload(Contrat.locataire), 
+                    joinedload(Contrat.bureaux).joinedload(Bureau.immeuble)
+                ).join(Locataire)
                 
+                # Apply immeuble filter
+                immeuble_id = self.immeuble_filter.currentData()
+                if immeuble_id:
+                    query = query.join(Contrat.bureaux).filter(Bureau.immeuble_id == immeuble_id)
+                
+                # Apply locataire filter
                 loc_id = self.locataire_combo.currentData()
                 if loc_id:
                     query = query.filter(Contrat.Locataire_id == loc_id)
                     
+                # Apply statut filter
                 statut_value = self.statut_combo.currentData()
                 if statut_value == "actif":
                     query = query.filter(Contrat.est_resilie_col == False)
                 elif statut_value == "resilie":
                     query = query.filter(Contrat.est_resilie_col == True)
+                
+                # Apply search filter (case-insensitive search across multiple fields)
+                search_text = self.search_edit.text().strip().lower()
+                if search_text:
+                    search_pattern = f"%{search_text}%"
+                    # Create exists subqueries to search in related tables without complex joins
+                    # Search in bureaux numbers
+                    has_matching_bureau = session.query(Bureau.id).join(
+                        contrat_bureau, Bureau.id == contrat_bureau.c.bureau_id
+                    ).filter(
+                        contrat_bureau.c.contrat_id == Contrat.id
+                    ).filter(
+                        Bureau.numero.ilike(search_pattern)
+                    ).exists()
+                    
+                    # Search in immeuble names through bureaux
+                    has_matching_immeuble = session.query(Bureau.id).join(
+                        contrat_bureau, Bureau.id == contrat_bureau.c.bureau_id
+                    ).join(
+                        Immeuble, Bureau.immeuble_id == Immeuble.id
+                    ).filter(
+                        contrat_bureau.c.contrat_id == Contrat.id
+                    ).filter(
+                        Immeuble.nom.ilike(search_pattern)
+                    ).exists()
+                    
+                    query = query.filter(
+                        or_(
+                            Locataire.nom.ilike(search_pattern),
+                            has_matching_bureau,
+                            has_matching_immeuble,
+                            func.cast(Contrat.id, String).ilike(search_pattern)
+                        )
+                    )
                     
                 contrats = query.order_by(Contrat.date_debut.desc()).all()
                 
@@ -196,6 +259,7 @@ class ContratView(BaseView):
                             Qt.ItemIsSelectable | Qt.ItemIsEnabled
                         )
                         
+                self.load_immeubles()
                 self.load_locataires()
                 
         except Exception as e:
@@ -203,31 +267,133 @@ class ContratView(BaseView):
         finally:
             self._is_loading = False
             
-    def load_locataires(self):
+    def load_immeubles(self):
+        """Load all immeubles into the filter combo"""
         try:
             from app.database.connection import get_database
-            from app.models.entities import Locataire
+            from app.models.entities import Immeuble
             
             db = get_database()
             with db.session_scope() as session:
-                locs = session.query(Locataire).all()
+                immeubles = session.query(Immeuble).order_by(Immeuble.nom).all()
                 
+                current_data = self.immeuble_filter.currentData()
+                self.immeuble_filter.blockSignals(True)
+                self.immeuble_filter.clear()
+                self.immeuble_filter.addItem("Tous les immeubles", None)
+                
+                for imm in immeubles:
+                    self.immeuble_filter.addItem(imm.nom, imm.id)
+                    
+                if current_data is not None:
+                    idx = self.immeuble_filter.findData(current_data)
+                    if idx >= 0:
+                        self.immeuble_filter.setCurrentIndex(idx)
+                self.immeuble_filter.blockSignals(False)
+                        
+        except Exception as e:
+            print(f"Erreur load_immeubles: {e}")
+    
+    def load_locataires(self, immeuble_id=None):
+        """Load locataires into the filter combo. If immeuble_id is provided, only show locataires with contracts in that immeuble."""
+        try:
+            from app.database.connection import get_database
+            from app.models.entities import Locataire, Contrat, Bureau
+            
+            db = get_database()
+            with db.session_scope() as session:
                 current_data = self.locataire_combo.currentData()
                 self.locataire_combo.blockSignals(True)
                 self.locataire_combo.clear()
                 self.locataire_combo.addItem("Tous les locataires", None)
                 
+                if immeuble_id:
+                    # Get distinct locataires who have contracts in this immeuble
+                    locs = session.query(Locataire).join(Contrat).join(Contrat.bureaux).filter(
+                        Bureau.immeuble_id == immeuble_id
+                    ).distinct().order_by(Locataire.nom).all()
+                else:
+                    # Get all locataires
+                    locs = session.query(Locataire).order_by(Locataire.nom).all()
+                
                 for loc in locs:
                     self.locataire_combo.addItem(loc.nom, loc.id)
                     
+                # Restore selection if still valid
                 if current_data is not None:
                     idx = self.locataire_combo.findData(current_data)
                     if idx >= 0:
                         self.locataire_combo.setCurrentIndex(idx)
+                
                 self.locataire_combo.blockSignals(False)
                         
         except Exception as e:
-            print(f"Erreur: {e}")
+            print(f"Erreur load_locataires: {e}")
+    
+    def on_immeuble_changed(self):
+        """Handle immeuble filter change - update locataire list and reload data"""
+        immeuble_id = self.immeuble_filter.currentData()
+        # Update locataire list based on selected immeuble
+        self.load_locataires(immeuble_id)
+        # Reload data with all filters
+        self.load_data()
+    
+    def on_locataire_changed(self):
+        """Handle locataire filter change - reload data only, don't reset immeuble filter"""
+        # Just reload data with current filters - don't change the immeuble filter
+        # The immeuble filter should stay as the user selected it
+        self.load_data()
+    
+    def load_immeubles_for_locataire(self, locataire_id=None):
+        """Load immeubles into the filter combo. If locataire_id is provided, only show immeubles where that locataire has contracts."""
+        try:
+            from app.database.connection import get_database
+            from app.models.entities import Immeuble, Contrat, Bureau
+            
+            db = get_database()
+            with db.session_scope() as session:
+                current_data = self.immeuble_filter.currentData()
+                self.immeuble_filter.blockSignals(True)
+                self.immeuble_filter.clear()
+                self.immeuble_filter.addItem("Tous les immeubles", None)
+                
+                if locataire_id:
+                    # Get distinct immeubles where this locataire has contracts
+                    immeubles = session.query(Immeuble).join(Bureau).join(Contrat.bureaux).filter(
+                        Contrat.Locataire_id == locataire_id
+                    ).distinct().order_by(Immeuble.nom).all()
+                else:
+                    # Get all immeubles
+                    immeubles = session.query(Immeuble).order_by(Immeuble.nom).all()
+                
+                for imm in immeubles:
+                    self.immeuble_filter.addItem(imm.nom, imm.id)
+                    
+                # Restore selection if still valid
+                if current_data is not None:
+                    idx = self.immeuble_filter.findData(current_data)
+                    if idx >= 0:
+                        self.immeuble_filter.setCurrentIndex(idx)
+                
+                self.immeuble_filter.blockSignals(False)
+                        
+        except Exception as e:
+            print(f"Erreur load_immeubles_for_locataire: {e}")
+    
+    def on_search_text_changed(self):
+        """Handle search text change with debounce"""
+        # Use a timer for debouncing search input
+        from PySide6.QtCore import QTimer
+        
+        # Cancel any existing timer
+        if hasattr(self, '_search_timer'):
+            self._search_timer.stop()
+        
+        # Create new timer for debounce
+        self._search_timer = QTimer(self)
+        self._search_timer.setSingleShot(True)
+        self._search_timer.timeout.connect(self.load_data)
+        self._search_timer.start(300)  # 300ms debounce
             
     def load_impayes(self, contrat_id, label, list_widget, date_debut, est_resilie, date_resiliation):
         try:
