@@ -52,18 +52,15 @@ class PaiementView(BaseView):
         self.immeuble_filter = QComboBox()
         self.immeuble_filter.setMinimumWidth(180)
         self.immeuble_filter.addItem("Tous les immeubles", None)
-        filter_layout.addWidget(QLabel("Immeuble:"))
         filter_layout.addWidget(self.immeuble_filter)
         
         self.locataire_filter = QComboBox()
         self.locataire_filter.setMinimumWidth(180)
         self.locataire_filter.addItem("Tous les locataires", None)
-        filter_layout.addWidget(QLabel("Locataire:"))
         filter_layout.addWidget(self.locataire_filter)
         
         self.type_combo = QComboBox()
         self.type_combo.addItem("Tous les types", None)
-        filter_layout.addWidget(QLabel("Type:"))
         filter_layout.addWidget(self.type_combo)
         
         filter_layout.addStretch()

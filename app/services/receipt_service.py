@@ -12,7 +12,6 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT
 from sqlalchemy.orm import Session
 
-from app.repositories.paiement_repository import PaiementRepository
 from app.utils.config import Config
 
 
@@ -22,6 +21,7 @@ class ReceiptService:
         self.config = Config()
 
     def generate_receipt(self, paiement_id: int, company_name: str = None, signature_path: str = None) -> Tuple[bytes, str]:
+        from app.repositories.paiement_repository import PaiementRepository
         paiement = PaiementRepository(self.db).get_by_id(paiement_id)
         if not paiement:
             raise ValueError(f"Payment with ID {paiement_id} not found")
