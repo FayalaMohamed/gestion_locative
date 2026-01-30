@@ -2,7 +2,7 @@
 """
 Simplified Bureau management view
 """
-from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
+from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                                QPushButton, QTableWidget, QTableWidgetItem,
                                QHeaderView, QLineEdit, QMessageBox,
                                QFormLayout, QComboBox, QDoubleSpinBox, QSpinBox,
@@ -10,6 +10,8 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
 from PySide6.QtCore import Qt
 from sqlalchemy import func
 from app.models.entities import contrat_bureau
+from app.ui.views.base_view import TableSelectionHelper
+from typing import List
 
 
 class BureauView(QWidget):
@@ -60,6 +62,7 @@ class BureauView(QWidget):
         self.table.setAlternatingRowColors(True)
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.table.verticalHeader().setVisible(False)
+        self.table.setSelectionBehavior(QTableWidget.SelectRows)
         layout.addWidget(self.table)
         
         buttons_layout = QHBoxLayout()
@@ -94,6 +97,14 @@ class BureauView(QWidget):
         self.btn_browse_docs.clicked.connect(self.on_browse_documents)
         self.immeuble_combo.currentIndexChanged.connect(self.load_data)
         self.disponible_combo.currentIndexChanged.connect(self.load_data)
+
+        self.table_helper = TableSelectionHelper(
+            self.table, self,
+            on_edit_callback=self._on_edit_items,
+            on_delete_callback=self._on_delete_items,
+            entity_name="bureau"
+        )
+
         self.load_immeubles()
         self.load_data()
         
@@ -196,7 +207,62 @@ class BureauView(QWidget):
                 self.load_data()
             except Exception as e:
                 QMessageBox.critical(self, "Erreur", str(e))
-                
+
+    def _on_edit_items(self, item_ids: List[int]):
+        """Handle edit action from context menu or keyboard."""
+        if len(item_ids) == 1:
+            dialog = BureauDialog(self, item_ids[0])
+            if dialog.exec() == QDialog.Accepted:
+                self.load_data()
+        else:
+            QMessageBox.information(self, "Information",
+                "Veuillez sélectionner un seul bureau pour la modification.")
+
+    def _on_delete_items(self, item_ids: List[int]):
+        """Handle delete action from context menu or keyboard."""
+        if not item_ids:
+            return
+
+        count = len(item_ids)
+        reply = QMessageBox.question(self, "Confirmation",
+            f"Êtes-vous sûr de vouloir supprimer {count} bureau{'x' if count > 1 else ''}?",
+            QMessageBox.Yes | QMessageBox.No)
+
+        if reply == QMessageBox.Yes:
+            try:
+                from app.database.connection import get_database
+                from app.models.entities import Contrat
+                from app.repositories.bureau_repository import BureauRepository
+
+                db = get_database()
+                deleted_count = 0
+                skipped_count = 0
+
+                with db.session_scope() as session:
+                    repo = BureauRepository(session)
+
+                    for item_id in item_ids:
+                        bur = repo.get_by_id(item_id)
+                        if bur:
+                            contrat_count = session.query(func.count(Contrat.id)).join(contrat_bureau).filter(contrat_bureau.c.bureau_id == item_id).scalar()
+
+                            if contrat_count > 0:
+                                skipped_count += 1
+                                continue
+
+                            repo.delete(bur)
+                            deleted_count += 1
+
+                self.load_immeubles()
+                self.load_data()
+
+                if skipped_count > 0:
+                    QMessageBox.warning(self, "Suppression partielle",
+                        f"{deleted_count} bureau(s) supprimé(s), {skipped_count} non supprimé(s) car ils sont liés à des contrats.")
+
+            except Exception as e:
+                QMessageBox.critical(self, "Erreur", f"Erreur lors de la suppression: {str(e)}")
+
     def on_configure_tree(self):
         try:
             from app.database.connection import get_database
@@ -267,10 +333,9 @@ class BureauDialog(QDialog):
         self.immeuble_combo = QComboBox()
         form.addRow("Immeuble*:", self.immeuble_combo)
         
-        self.numero_spin = QSpinBox()
-        self.numero_spin.setMinimum(1)
-        self.numero_spin.setMaximum(9999)
-        form.addRow("Numéro*:", self.numero_spin)
+        self.numero_edit = QLineEdit()
+        self.numero_edit.setPlaceholderText("Ex: B2.1, 101, A-5")
+        form.addRow("Numéro*:", self.numero_edit)
         
         self.etage_edit = QLineEdit()
         form.addRow("Étage:", self.etage_edit)
@@ -319,7 +384,7 @@ class BureauDialog(QDialog):
                     idx = self.immeuble_combo.findData(bur.immeuble_id)
                     if idx >= 0:
                         self.immeuble_combo.setCurrentIndex(idx)
-                    self.numero_spin.setValue(int(bur.numero) if bur.numero else 1)
+                    self.numero_edit.setText(bur.numero or "")
                     self.etage_edit.setText(bur.etage or "")
                     self.surface_spin.setValue(bur.surface_m2 or 0)
                     self.notes_edit.setText(bur.notes or "")
@@ -330,6 +395,12 @@ class BureauDialog(QDialog):
         if self.immeuble_combo.currentData() is None:
             QMessageBox.warning(self, "Validation", "Immeuble obligatoire")
             return
+        
+        numero_text = self.numero_edit.text().strip()
+        if not numero_text:
+            QMessageBox.warning(self, "Validation", "Numéro de bureau obligatoire")
+            return
+        
         try:
             from app.database.connection import get_database
             from app.models.entities import Bureau
@@ -342,7 +413,7 @@ class BureauDialog(QDialog):
                     if bur:
                         repo.update(bur,
                             immeuble_id=self.immeuble_combo.currentData(),
-                            numero=self.numero_spin.value(),
+                            numero=numero_text,
                             etage=self.etage_edit.text().strip() or None,
                             surface_m2=self.surface_spin.value(),
                             notes=self.notes_edit.toPlainText().strip() or None
@@ -350,7 +421,7 @@ class BureauDialog(QDialog):
                 else:
                     repo.create(
                         immeuble_id=self.immeuble_combo.currentData(),
-                        numero=self.numero_spin.value(),
+                        numero=numero_text,
                         etage=self.etage_edit.text().strip() or None,
                         surface_m2=self.surface_spin.value(),
                         notes=self.notes_edit.toPlainText().strip() or None

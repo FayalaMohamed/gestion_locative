@@ -21,13 +21,13 @@ class ReceiptService:
         self.db = db
         self.config = Config()
 
-    def generate_receipt(self, paiement_id: int) -> Tuple[bytes, str]:
+    def generate_receipt(self, paiement_id: int, company_name: str = None, signature_path: str = None) -> Tuple[bytes, str]:
         paiement = PaiementRepository(self.db).get_by_id(paiement_id)
         if not paiement:
             raise ValueError(f"Payment with ID {paiement_id} not found")
 
         receipt_number = self._generate_receipt_number()
-        pdf_content = self._build_pdf(paiement, receipt_number)
+        pdf_content = self._build_pdf(paiement, receipt_number, company_name, signature_path)
         return pdf_content, receipt_number
 
     def _generate_receipt_number(self) -> str:
@@ -35,7 +35,7 @@ class ReceiptService:
         sequence = str(random.randint(1, 999999)).zfill(6)
         return f"RCU-{year}-{sequence}"
 
-    def _build_pdf(self, paiement, receipt_number: str) -> bytes:
+    def _build_pdf(self, paiement, receipt_number: str, company_name: str = None, signature_path: str = None) -> bytes:
         buffer = io.BytesIO()
         doc = SimpleDocTemplate(
             buffer,
@@ -53,8 +53,8 @@ class ReceiptService:
             'Title',
             parent=styles['Heading1'],
             alignment=TA_CENTER,
-            fontSize=16,
-            spaceAfter=20
+            fontSize=20,
+            spaceAfter=15
         )
         header_style = ParagraphStyle(
             'Header',
@@ -63,14 +63,17 @@ class ReceiptService:
             spaceAfter=10
         )
 
-        company_name = self.config.get('receipts', 'company_name', default='Gestion Immobilière')
-        elements.append(Paragraph(f"<b>{company_name}</b>", title_style))
-        elements.append(Spacer(1, 10*mm))
-
-        elements.append(Paragraph("REÇU DE PAIEMENT", header_style))
+        # Main title
+        elements.append(Paragraph("<b>REÇU DE PAIEMENT</b>", title_style))
         elements.append(Spacer(1, 5*mm))
-
+        
+        # Company name (from parameter or config default)
+        if company_name is None:
+            company_name = self.config.get('receipts', 'company_name', default='Gestion Immobilière')
+        
+        # Add company name as a field in the receipt info
         receipt_data = [
+            ['Émetteur:', company_name],
             ['Numéro de reçu:', receipt_number],
             ["Date d'émission:", datetime.now().strftime('%d/%m/%Y %H:%M')],
         ]
@@ -156,7 +159,10 @@ class ReceiptService:
         elements.append(Paragraph("Signature:", styles['Normal']))
         elements.append(Spacer(1, 5*mm))
 
-        signature_path = self.config.get_signature_path()
+        # Use provided signature path or fall back to config
+        if signature_path is None:
+            signature_path = self.config.get_signature_path()
+        
         if signature_path:
             try:
                 from pathlib import Path

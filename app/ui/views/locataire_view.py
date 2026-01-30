@@ -9,7 +9,8 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont
 
-from app.ui.views.base_view import BaseView
+from typing import List
+from app.ui.views.base_view import BaseView, TableSelectionHelper
 
 
 class LocataireView(BaseView):
@@ -62,7 +63,6 @@ class LocataireView(BaseView):
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.table.verticalHeader().setVisible(False)
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.table.setSelectionMode(QTableWidget.SingleSelection)
         
         table_layout.addWidget(self.table)
         
@@ -103,6 +103,12 @@ class LocataireView(BaseView):
         self.btn_browse_docs.clicked.connect(self.on_browse_documents)
         self.statut_combo.currentIndexChanged.connect(self.load_data)
         self.search_edit.textChanged.connect(self.on_search)
+        self.table_helper = TableSelectionHelper(
+            self.table, self,
+            on_edit_callback=self._on_edit_items,
+            on_delete_callback=self._on_delete_items,
+            entity_name="locataire"
+        )
         self.load_data()
         
     def load_data(self):
@@ -205,6 +211,67 @@ class LocataireView(BaseView):
                 self.load_data()
                 self.data_changed.emit()
                 self.data_changed.emit()
+            except Exception as e:
+                QMessageBox.critical(self, "Erreur", f"Erreur: {str(e)}")
+
+    def _on_edit_items(self, item_ids: List[int]):
+        """Handle edit action from context menu or keyboard."""
+        if len(item_ids) == 1:
+            dialog = LocataireDialog(self, locataire_id=item_ids[0])
+            if dialog.exec() == QDialog.Accepted:
+                self.load_data()
+                self.data_changed.emit()
+        else:
+            QMessageBox.information(self, "Information", 
+                "Veuillez sélectionner un seul locataire pour la modification.")
+
+    def _on_delete_items(self, item_ids: List[int]):
+        """Handle delete action from context menu or keyboard."""
+        if not item_ids:
+            return
+
+        count = len(item_ids)
+        reply = QMessageBox.question(self, "Confirmation",
+            f"Êtes-vous sûr de vouloir supprimer {count} locataire{'s' if count > 1 else ''}?",
+            QMessageBox.Yes | QMessageBox.No)
+
+        if reply == QMessageBox.Yes:
+            try:
+                from app.database.connection import get_database
+                from app.models.entities import Locataire, Contrat, Paiement
+                from app.repositories.locataire_repository import LocataireRepository
+                from sqlalchemy import func
+
+                db = get_database()
+                deleted_count = 0
+                skipped_count = 0
+
+                with db.session_scope() as session:
+                    repo = LocataireRepository(session)
+
+                    for item_id in item_ids:
+                        loc = repo.get_by_id(item_id)
+                        if loc:
+                            contrat_count = session.query(func.count(Contrat.id)).filter(Contrat.Locataire_id == item_id).scalar()
+                            if contrat_count > 0:
+                                skipped_count += 1
+                                continue
+
+                            paiement_count = session.query(func.count(Paiement.id)).filter(Paiement.Locataire_id == item_id).scalar()
+                            if paiement_count > 0:
+                                skipped_count += 1
+                                continue
+
+                            repo.delete(loc)
+                            deleted_count += 1
+
+                self.load_data()
+                self.data_changed.emit()
+
+                if skipped_count > 0:
+                    QMessageBox.warning(self, "Suppression partielle",
+                        f"{deleted_count} locataire(s) supprimé(s), {skipped_count} non supprimé(s) car ils ont des contrats ou paiements associés.")
+
             except Exception as e:
                 QMessageBox.critical(self, "Erreur", f"Erreur: {str(e)}")
             

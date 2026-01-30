@@ -143,11 +143,78 @@ class Config:
         return self._resolve_path(path, 'data/backups')
 
     def get_signature_path(self) -> str:
-        """Get the signature path"""
+        """Get the signature path (legacy - returns first signature or empty)"""
+        signatures = self.get_signatures()
+        if signatures:
+            return signatures[0].get('path', '')
+        # Fallback to legacy single signature
         path = self.get('receipts', 'signature_path', default='')
         if path:
             return self._resolve_path(path, '')
         return ''
+    
+    def get_signatures(self) -> list:
+        """Get list of all signatures with their names and paths"""
+        signatures = self.get('receipts', 'signatures', default=[])
+        if not signatures:
+            # Check for legacy single signature and migrate
+            legacy_path = self.get('receipts', 'signature_path', default='')
+            if legacy_path:
+                signatures = [{'name': 'Signature 1', 'path': legacy_path}]
+                self.set(signatures, 'receipts', 'signatures')
+                # Clear legacy path to prevent remigration
+                self.set('', 'receipts', 'signature_path')
+                self.save_config()
+        return signatures or []
+    
+    def add_signature(self, name: str, path: str) -> None:
+        """Add a new signature"""
+        signatures = self.get_signatures()
+        signatures.append({'name': name, 'path': path})
+        self.set(signatures, 'receipts', 'signatures')
+        self.save_config()
+    
+    def remove_signature(self, index: int) -> None:
+        """Remove a signature by index"""
+        signatures = self.get_signatures()
+        if 0 <= index < len(signatures):
+            signatures.pop(index)
+            self.set(signatures, 'receipts', 'signatures')
+            # If no more signatures, clear legacy path to prevent remigration
+            if not signatures:
+                self.set('', 'receipts', 'signature_path')
+            self.save_config()
+    
+    def get_company_names(self) -> list:
+        """Get list of company names used for receipts"""
+        names = self.get('receipts', 'company_names', default=[])
+        if not names:
+            # Check for legacy single company name and migrate
+            legacy_name = self.get('receipts', 'company_name', default='')
+            if legacy_name and legacy_name != 'Gestion Immobilière':
+                names = [legacy_name]
+                self.set(names, 'receipts', 'company_names')
+                self.save_config()
+            else:
+                names = ['Gestion Immobilière']
+        return names or ['Gestion Immobilière']
+    
+    def add_company_name(self, name: str) -> None:
+        """Add a company name to the list (avoid duplicates)"""
+        names = self.get_company_names()
+        if name not in names:
+            names.append(name)
+            self.set(names, 'receipts', 'company_names')
+            self.save_config()
+    
+    def set_default_company_name(self, name: str) -> None:
+        """Set the default company name (first in the list)"""
+        names = self.get_company_names()
+        if name in names:
+            names.remove(name)
+        names.insert(0, name)
+        self.set(names, 'receipts', 'company_names')
+        self.save_config()
 
     @property
     def is_debug(self) -> bool:

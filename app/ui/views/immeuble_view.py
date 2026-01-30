@@ -9,8 +9,9 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                                QSplitter, QFrame)
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont
+from typing import List
 
-from app.ui.views.base_view import BaseView
+from app.ui.views.base_view import BaseView, TableSelectionHelper
 
 
 class ImmeubleView(BaseView):
@@ -56,8 +57,7 @@ class ImmeubleView(BaseView):
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.table.verticalHeader().setVisible(False)
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.table.setSelectionMode(QTableWidget.SingleSelection)
-        
+
         table_layout.addWidget(self.table)
         
         self.layout().addLayout(table_layout)
@@ -96,6 +96,14 @@ class ImmeubleView(BaseView):
         self.btn_configure_tree.clicked.connect(self.on_configure_tree)
         self.btn_browse_docs.clicked.connect(self.on_browse_documents)
         self.search_edit.textChanged.connect(self.on_search)
+
+        self.table_helper = TableSelectionHelper(
+            self.table, self,
+            on_edit_callback=self._on_edit_items,
+            on_delete_callback=self._on_delete_items,
+            entity_name="immeuble"
+        )
+
         self.load_data()
         
     def load_data(self):
@@ -182,7 +190,64 @@ class ImmeubleView(BaseView):
                     self.data_changed.emit()
             except Exception as e:
                 QMessageBox.critical(self, "Erreur", f"Erreur lors de la suppression: {str(e)}")
-            
+
+    def _on_edit_items(self, item_ids: List[int]):
+        """Handle edit action from context menu or keyboard."""
+        if len(item_ids) == 1:
+            dialog = ImmeubleDialog(self, item_ids[0])
+            if dialog.exec() == QDialog.Accepted:
+                self.load_data()
+                self.data_changed.emit()
+        else:
+            QMessageBox.information(self, "Information", 
+                "Veuillez sélectionner un seul immeuble pour la modification.")
+
+    def _on_delete_items(self, item_ids: List[int]):
+        """Handle delete action from context menu or keyboard."""
+        if not item_ids:
+            return
+
+        count = len(item_ids)
+        reply = QMessageBox.question(self, "Confirmation",
+            f"Êtes-vous sûr de vouloir supprimer {count} immeuble{'s' if count > 1 else ''}?",
+            QMessageBox.Yes | QMessageBox.No)
+
+        if reply == QMessageBox.Yes:
+            try:
+                from app.database.connection import get_database
+                from app.models.entities import Bureau
+                from app.repositories.immeuble_repository import ImmeubleRepository
+                from sqlalchemy import func
+
+                db = get_database()
+                deleted_count = 0
+                skipped_count = 0
+
+                with db.session_scope() as session:
+                    repo = ImmeubleRepository(session)
+
+                    for item_id in item_ids:
+                        img = repo.get_by_id(item_id)
+                        if img:
+                            bureau_count = session.query(func.count(Bureau.id)).filter(Bureau.immeuble_id == item_id).scalar()
+
+                            if bureau_count > 0:
+                                skipped_count += 1
+                                continue
+
+                            repo.delete(img)
+                            deleted_count += 1
+
+                self.load_data()
+                self.data_changed.emit()
+
+                if skipped_count > 0:
+                    QMessageBox.warning(self, "Suppression partielle",
+                        f"{deleted_count} immeuble(s) supprimé(s), {skipped_count} non supprimé(s) car ils contiennent des bureaux.")
+
+            except Exception as e:
+                QMessageBox.critical(self, "Erreur", f"Erreur lors de la suppression: {str(e)}")
+
     def on_search(self, text):
         for row in range(self.table.rowCount()):
             match = False

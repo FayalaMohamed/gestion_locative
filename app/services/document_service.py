@@ -84,9 +84,17 @@ class DocumentService:
                 raise FileNotFoundError(f"Source file not found: {source_path}")
 
             dest_folder = self.get_full_folder_path(entity_type, entity_id, folder_path)
-            file_ext = source.suffix
-            unique_filename = f"{uuid.uuid4().hex}{file_ext}"
-            dest_path = dest_folder / unique_filename
+            original_filename = source.name
+            dest_path = dest_folder / original_filename
+
+            # Handle filename conflicts by appending a number if file already exists
+            counter = 1
+            while dest_path.exists():
+                name_stem = source.stem
+                file_ext = source.suffix
+                new_filename = f"{name_stem}_{counter}{file_ext}"
+                dest_path = dest_folder / new_filename
+                counter += 1
 
             shutil.copy2(source, dest_path)
             file_size = dest_path.stat().st_size
@@ -95,7 +103,7 @@ class DocumentService:
                 entity_type=entity_type,
                 entity_id=entity_id,
                 folder_path=folder_path,
-                filename=unique_filename,
+                filename=dest_path.name,
                 original_name=source.name,
                 file_type=self._get_file_type(source.suffix),
                 file_size=file_size,
@@ -199,6 +207,49 @@ class DocumentService:
             return None
         except Exception as e:
             logger.error(f"Failed to update document: {e}")
+            return None
+
+    def rename_document(self, doc_id: int, new_name: str) -> Optional[Dict[str, Any]]:
+        """Rename a document and update both filename and original_name"""
+        try:
+            doc = self.repo.get_document_by_id(doc_id)
+            if not doc:
+                return None
+
+            old_path = self.get_file_path(doc_id)
+            if not old_path or not old_path.exists():
+                raise FileNotFoundError(f"Document file not found: {old_path}")
+
+            new_path = old_path.parent / new_name
+            
+            # Handle filename conflicts
+            counter = 1
+            while new_path.exists():
+                name_stem = Path(new_name).stem
+                file_ext = Path(new_name).suffix
+                new_filename = f"{name_stem}_{counter}{file_ext}"
+                new_path = old_path.parent / new_filename
+                counter += 1
+
+            # Rename the file
+            shutil.move(str(old_path), str(new_path))
+
+            # Update the document record
+            doc = self.repo.update_document(
+                doc_id,
+                filename=new_path.name,
+                original_name=new_name
+            )
+            self.session.commit()
+
+            return {
+                "id": doc.id,
+                "original_name": doc.original_name,
+                "filename": doc.filename,
+                "folder_path": doc.folder_path
+            }
+        except Exception as e:
+            logger.error(f"Failed to rename document: {e}")
             return None
 
     def get_documents_for_entity(self, entity_type: str, entity_id: int) -> List[Dict[str, Any]]:
