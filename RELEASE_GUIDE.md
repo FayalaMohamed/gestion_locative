@@ -1,119 +1,168 @@
 # Guide de Release - Gestion Locative Pro
 
-Ce guide explique comment créer et distribuer une nouvelle version de l'application avec support des migrations de base de données et de configuration.
+Ce guide explique comment créer et distribuer une nouvelle version de l'application avec support des migrations de base de données, de configuration et de mise à jour automatique.
 
 ## 📋 Prérequis
 
 - Python 3.11+ avec conda
 - Environnement conda `location` activé
 - PyInstaller installé
-- Accès au repository GitHub
+- Accès au repository GitHub : `FayalaMohamed/gestion_locative`
+- Icône de l'application dans `app/ui/icon.png`
 
 ## 🔄 Processus de Release Complet
 
 ### Étape 1: Préparation du Code
 
 1. **Mettre à jour la version dans `main.py`**:
-   ```python
-   APP_VERSION = "1"  # Incrémenter pour chaque release
-   ```
+    ```python
+    APP_VERSION = "0.2"  # Incrémenter pour chaque release
+    ```
 
 2. **Si vous modifiez le schéma de la base de données**:
-   - Modifiez les modèles dans `app/models/entities.py`
-   - Créez une migration Alembic:
-     ```bash
-     alembic revision --autogenerate -m "Description des changements"
-     ```
-   
+    - Modifiez les modèles dans `app/models/entities.py`
+    - Créez une migration Alembic:
+      ```bash
+      alembic revision --autogenerate -m "Description des changements"
+      ```
+    - Testez la migration:
+      ```bash
+      alembic upgrade head
+      ```
+    
 3. **Si vous modifiez la configuration**:
-   - Modifiez `app/utils/config.py` pour ajouter les nouveaux champs
-   - Ajoutez la logique de migration dans `migrate_config()` dans `main.py`
+    - Modifiez `app/utils/config.py` pour ajouter les nouveaux champs
+    - Ajoutez la logique de migration dans `migrate_config()` dans `main.py`
+    - Testez la migration de configuration
 
 ### Étape 2: Test Local
 
-1. **Tester les migrations**:
-   ```bash
-   python main.py
-   ```
-   - L'application doit démarrer sans erreurs
-   - Les migrations doivent s'exécuter automatiquement
-   - Vérifier dans la console: "Database migrations completed successfully"
+1. **Activer l'environnement**:
+    ```bash
+    conda activate location
+    ```
 
-2. **Tester la fonctionnalité**:
-   - Vérifier que toutes les nouvelles fonctionnalités fonctionnent
-   - Vérifier que les données existantes sont préservées
+2. **Tester les migrations**:
+    ```bash
+    python main.py
+    ```
+    - L'application doit démarrer sans erreurs
+    - Les migrations doivent s'exécuter automatiquement
+    - Vérifier dans la console: "Database migrations completed successfully"
+    - Vérifier: "Config migration completed" (si applicable)
+
+3. **Exécuter les tests**:
+    ```bash
+    python run_tests.py
+    ```
+    - Tous les tests doivent passer
+    - Vérifier qu'il n'y a pas d'erreurs
+
+4. **Tester la fonctionnalité**:
+    - Vérifier que toutes les nouvelles fonctionnalités fonctionnent
+    - Vérifier que les données existantes sont préservées
+    - Tester les filtres et recherches
+    - Vérifier la génération de reçus
+    - Tester la gestion documentaire
 
 ### Étape 3: Créer l'Exécutable
 
 1. **Builder avec PyInstaller**:
-   ```bash
-   pyinstaller --clean gestion_locative.spec
-   ```
+    ```bash
+    # Activer l'environnement
+    conda activate location
+    
+    # Builder l'exécutable
+    pyinstaller --clean gestion_locative.spec
+    ```
 
 2. **Vérifier le build**:
-   - L'exécutable est dans `dist/GestionLocativePro.exe`
-   - Tester l'exécutable localement
+    - L'exécutable est dans `dist/GestionLocativePro.exe`
+    - Taille approximative : ~100MB
+    - Tester l'exécutable localement :
+      ```bash
+      cd dist
+      GestionLocativePro.exe
+      ```
+    - Vérifier que toutes les fonctionnalités marchent
+    - Vérifier les migrations automatiques
+    - Vérifier le système de mise à jour
 
 ### Étape 4: Préparer la Release GitHub
 
-1. **Créer une sauvegarde de la base de données de test**:
-   - Copier `data/gestion_locative.db` (avec des données de test)
-   - Nommer: `gestion_locative_vide.db`
+1. **Créer une sauvegarde de la base de données**:
+    - Copier `data/gestion_locative.db` (avec des données de test)
+    - Nommer: `gestion_locative_vide.db` (pour nouveaux clients)
 
 2. **Créer le fichier ZIP pour les nouveaux clients**:
-   ```
-   GestionLocativePro_v1.zip
-   ├── GestionLocativePro.exe
-   ├── config.yaml
-   └── data/
-       └── gestion_locative.db (base vide)
-   ```
+    ```
+    GestionLocativePro_v0.2.zip
+    ├── GestionLocativePro.exe
+    ├── config.yaml
+    ├── credentials/ (optionnel)
+    │   └── credentials.json
+    └── data/
+        └── gestion_locative.db (base vide)
+    ```
 
 3. **Créer la Release sur GitHub**:
-   - Aller sur: https://github.com/FayalaMohamed/gestion_locative/releases
-   - Cliquer "Draft a new release"
-   - **Tag version**: `v1` (doit correspondre à APP_VERSION)
-   - **Release title**: `Version 1.0 - Description`
-   - **Description**:
-     ```markdown
-     ## Nouveautés dans cette version:
-     - Feature 1
-     - Feature 2
-     - Correction de bugs
-     
-     ## Migrations incluses:
-     - Migration de base de données: Oui/Non
-     - Migration de configuration: Oui/Non
-     
-     ## Installation:
-     1. Téléchargez `GestionLocativePro.exe`
-     2. Remplacez votre ancien fichier .exe
-     3. L'application se mettra à jour automatiquement
-     
-     ## Notes:
-     - Une sauvegarde de votre base de données sera créée automatiquement
-     - Vos données seront préservées
-     ```
+    - Aller sur: https://github.com/FayalaMohamed/gestion_locative/releases
+    - Cliquer "Draft a new release"
+    - **Tag version**: `v0.2` (doit correspondre à APP_VERSION)
+    - **Release title**: `Version 0.2 - Description courte`
+    - **Description**:
+      ```markdown
+      ## Nouveautés dans cette version:
+      - Feature 1
+      - Feature 2
+      - Correction de bugs
+      
+      ## Migrations incluses:
+      - Migration de base de données: Oui/Non
+      - Migration de configuration: Oui/Non
+      
+      ## Installation:
+      ### Pour les clients existants:
+      1. L'application détectera automatiquement la mise à jour
+      2. Cliquez sur "Oui" pour télécharger et installer
+      3. L'application redémarrera automatiquement
+      
+      ### Pour les nouveaux clients:
+      1. Téléchargez `GestionLocativePro_v0.2.zip`
+      2. Extrayez le dossier
+      3. Lancez `GestionLocativePro.exe`
+      
+      ## Notes:
+      - Une sauvegarde de votre base de données sera créée automatiquement
+      - Vos données seront préservées
+      - Les migrations s'exécutent automatiquement au démarrage
+      ```
 
 4. **Uploader les fichiers**:
-   - `GestionLocativePro.exe` (obligatoire - l'updater le télécharge)
-   - `GestionLocativePro_v1.zip` (optionnel - pour nouveaux clients)
-   - Notes de release détaillées
+    - `GestionLocativePro.exe` (obligatoire - l'updater le télécharge)
+    - `GestionLocativePro_v0.2.zip` (optionnel - pour nouveaux clients)
+    - Notes de release détaillées
 
-### Étape 5: Distribution aux Clients Existants
+### Étape 5: Distribution aux Clients
 
 **Option A: Auto-updater (Recommandé)**
 - Les clients ouvrent l'application
-- Vont dans "Aide" → "Vérifier les mises à jour"
+- Une notification apparaît automatiquement si une mise à jour est disponible
+- Ou: Menu "Aide" → "Vérifier les mises à jour"
 - L'application détecte la nouvelle version
 - Cliquent "Oui" pour télécharger et installer
 - L'application redémarre automatiquement avec les migrations
 
 **Option B: Email manuel**
 - Envoyez un email avec le lien GitHub
-- Les clients téléchargent manuellement
-- Remplacent le fichier .exe
+- Les clients téléchargent manuellement `GestionLocativePro.exe`
+- Remplacent le fichier .exe existant
 - L'application fait les migrations au démarrage
+
+**Option C: Package complet**
+- Envoyez le fichier ZIP complet
+- Les clients extraient et remplacent tout le dossier
+- Recommandé pour les mises à jour majeures
 
 ## 🗄️ Gestion des Migrations
 
@@ -216,48 +265,85 @@ Avant de publier une nouvelle version, vérifier:
 - [ ] Tests passent: `python run_tests.py`
 - [ ] Application démarre sans erreurs
 - [ ] Migration Alembic créée si schéma modifié
+- [ ] Migration Alembic testée: `alembic upgrade head`
 - [ ] Logic de migration config ajouté si nécessaire
-- [ ] Exécutable buildé et testé
+- [ ] Exécutable buildé et testé localement
+- [ ] Toutes les fonctionnalités testées dans l'exécutable
 - [ ] Release créée sur GitHub avec tag correct
 - [ ] Fichier .exe uploadé comme asset
+- [ ] Fichier ZIP créé pour nouveaux clients (optionnel)
 - [ ] Notes de release rédigées
 - [ ] Test de l'auto-updater fait
+- [ ] Documentation mise à jour si nécessaire
 
-## 📝 Exemple Complet: Release v1.0 → v1.1
+## 📝 Exemple Complet: Release v0.1 → v0.2
 
 ### Changements:
 - Ajout champ `frais_electricite` dans paiements
-- Nouveau paramètre dans config
+- Nouveau paramètre dans config pour signatures multiples
 
 ### Étapes:
 
 1. **Modifier modèle** (`app/models/entities.py`):
-   ```python
-   frais_electricite = Column(Numeric(10, 3), nullable=True, default=0)
-   ```
+    ```python
+    frais_electricite = Column(Numeric(10, 3), nullable=True, default=0)
+    ```
 
 2. **Créer migration**:
-   ```bash
-   alembic revision --autogenerate -m "Add frais electricite"
-   ```
+    ```bash
+    conda activate location
+    alembic revision --autogenerate -m "Add frais electricite"
+    alembic upgrade head
+    ```
 
 3. **Modifier config migration** (`main.py`):
-   ```python
-   if config_version == "1":
-       config.set([], 'new_section', 'new_list')
-   ```
+    ```python
+    def migrate_config():
+        config = Config()
+        config_version = config.get('app', 'version', default='0')
+        
+        if config_version != APP_VERSION:
+            print(f"Migrating config from v{config_version} to v{APP_VERSION}")
+            
+            # Migration de v0.1 à v0.2
+            if config_version == "0.1":
+                # Ajouter support signatures multiples
+                if not config.get('receipts', 'signatures'):
+                    config.set([], 'receipts', 'signatures')
+            
+            config.set(APP_VERSION, 'app', 'version')
+            config.save_config()
+    ```
 
 4. **Mettre à jour version**:
-   ```python
-   APP_VERSION = "1.1"
-   ```
+    ```python
+    APP_VERSION = "0.2"
+    ```
 
-5. **Builder et tester**
+5. **Tester**:
+    ```bash
+    python run_tests.py
+    python main.py
+    ```
 
-6. **Créer release GitHub** avec tag `v1.1`
+6. **Builder**:
+    ```bash
+    pyinstaller --clean gestion_locative.spec
+    ```
 
-7. **Les clients reçoivent la notification** et mettent à jour automatiquement!
+7. **Tester l'exécutable**:
+    ```bash
+    cd dist
+    GestionLocativePro.exe
+    ```
+
+8. **Créer release GitHub** avec tag `v0.2`
+
+9. **Les clients reçoivent la notification** et mettent à jour automatiquement!
 
 ---
 
-**Questions?** Consultez le code dans `main.py` pour les exemples de migration.
+**Questions?** 
+- Consulter le code dans `main.py` pour les exemples de migration
+- Vérifier `AGENTS.md` pour les guidelines de développement
+- Vérifier `README.md` pour la documentation générale
