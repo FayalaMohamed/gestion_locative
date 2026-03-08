@@ -1,17 +1,21 @@
 # -*- mode: python ; coding: utf-8 -*-
+import os
+from pathlib import Path
 from PyInstaller.utils.hooks import collect_all
 
 block_cipher = None
 
+spec_dir = SPECPATH
+
 a = Analysis(
-    ['D:\\code\\locations\\main.py'],
-    pathex=['D:\\code\\locations'],
+    [os.path.join(spec_dir, 'main.py')],
+    pathex=[spec_dir],
     binaries=[],
     datas=[
-        ('D:\\code\\locations\\config.yaml', '.'),
-        ('D:\\code\\locations\\app\\ui\\icon.png', 'app\\ui'),
-        ('D:\\code\\locations\\alembic.ini', '.'),
-        ('D:\\code\\locations\\alembic', 'alembic'),
+        (os.path.join(spec_dir, 'config.yaml'), '.'),
+        (os.path.join(spec_dir, 'app', 'ui', 'icon.png'), os.path.join('app', 'ui')),
+        (os.path.join(spec_dir, 'alembic.ini'), '.'),
+        (os.path.join(spec_dir, 'alembic'), 'alembic'),
     ],
     hiddenimports=[
         'PySide6.QtCore',
@@ -75,5 +79,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='D:\\code\\locations\\app\\ui\\icon.png',
+    icon=os.path.join(spec_dir, 'app', 'ui', 'icon.png'),
 )
