@@ -1,11 +1,12 @@
 """Initial migration with frais fields
 
 Revision ID: e23588e3971c
-Revises: 
+Revises:
 Create Date: 2026-01-30 22:03:29.075565
 
 """
-from typing import Sequence, Union
+from collections.abc import Sequence
+from typing import Union
 
 from alembic import op
 import sqlalchemy as sa
