@@ -7,8 +7,51 @@ on:
     branches: [main, master]
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install ruff mypy
+      
+      - name: Run Ruff linter
+        run: ruff check .
+      
+      - name: Run MyPy type checker
+        run: mypy app --ignore-missing-imports --no-error-summary || true
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: Install Bandit
+        run: pip install bandit
+      
+      - name: Run Bandit security scan
+        run: bandit -r app -ll --skip B101,B311
+
   test:
     runs-on: ubuntu-latest
+    needs: [lint]
     
     steps:
       - name: Checkout code
@@ -36,6 +79,9 @@ jobs:
           echo "  path: data/gestion_locative.db" >> config.yaml
           mkdir -p data
       
+      - name: Initialize database
+        run: python app/init_db.py
+      
       - name: Run non-UI tests
         run: |
           python run_tests.py
@@ -43,3 +89,35 @@ jobs:
       - name: Run UI tests with virtual display
         run: |
           xvfb-run -a --server-args="-screen 0 1024x768x24" python tests/ui/run_all_ui_tests.py
+
+  build:
+    runs-on: windows-latest
+    needs: [test]
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+      
+      - name: Build executable
+        run: |
+          pyinstaller --onefile --windowed --clean gestion_locative.spec
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gestion-locative-exe
+          path: dist/*.exe
+          retention-days: 30
