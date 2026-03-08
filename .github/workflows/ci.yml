@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: Install system dependencies for Qt
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb libxkbcommon-x11-0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-xinerama0 libxcb-xfixes0 libxcb-shape0 libegl1 libgl1
+          
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Create config file
+        run: |
+          echo "database:" > config.yaml
+          echo "  path: data/gestion_locative.db" >> config.yaml
+          mkdir -p data
+      
+      - name: Run non-UI tests
+        run: |
+          python run_tests.py
+      
+      - name: Run UI tests with virtual display
+        run: |
+          xvfb-run -a --server-args="-screen 0 1024x768x24" python tests/ui/run_all_ui_tests.py
