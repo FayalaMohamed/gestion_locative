@@ -39,7 +39,7 @@ Ce guide explique comment créer et distribuer une nouvelle version de l'applica
 
 1. **Activer l'environnement**:
     ```bash
-    conda activate location
+    conda activate gestion_locative
     ```
 
 2. **Tester les migrations**:
@@ -70,7 +70,7 @@ Ce guide explique comment créer et distribuer une nouvelle version de l'applica
 1. **Builder avec PyInstaller**:
     ```bash
     # Activer l'environnement
-    conda activate location
+    conda activate gestion_locative
     
     # Builder l'exécutable
     pyinstaller --clean gestion_locative.spec
@@ -291,7 +291,7 @@ Avant de publier une nouvelle version, vérifier:
 
 2. **Créer migration**:
     ```bash
-    conda activate location
+    conda activate gestion_locative
     alembic revision --autogenerate -m "Add frais electricite"
     alembic upgrade head
     ```

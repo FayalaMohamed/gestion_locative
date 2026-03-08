@@ -16,7 +16,7 @@ Gestion Locative Pro is a property management application for office rentals wit
 ### Environment Setup
 **IMPORTANT**: Always activate the conda environment before running any code:
 ```bash
-conda activate location
+conda activate gestion_locative
 ```
 
 ### Running the Application
@@ -39,16 +39,33 @@ python app\init_db.py --seed
 
 ### Testing Commands
 ```bash
-# Run all tests
+# Run all backend tests
 python run_tests.py
 
 # Run individual test files
-python tests/test_crud.py          # CRUD operations
-python tests/test_backup.py        # Backup functionality
-python tests/test_relation.py      # Relationship tests
+python tests/test_crud.py              # CRUD operations
+python tests/test_backup.py            # Backup functionality
+python tests/test_relation.py          # Relationship tests
+python tests/test_update_system.py     # Auto-updater
+python tests/test_receipt_features.py  # Receipt generation
+
+# Run UI integration tests (requires display)
+python tests/ui/run_all_ui_tests.py
 
 # Query database for inspection
 python tests/query_db.py
+```
+
+### Code Quality Commands
+```bash
+# Linting with ruff
+ruff check .
+
+# Type checking with mypy
+mypy app/
+
+# Format code (if needed)
+ruff format .
 ```
 
 ### Build Commands
@@ -60,7 +77,7 @@ pip install -r requirements.txt
 pyinstaller --onefile --windowed --clean gestion_locative.spec
 
 # Or with conda
-conda run -n location pyinstaller --clean gestion_locative.spec
+conda run -n gestion_locative pyinstaller --clean gestion_locative.spec
 ```
 
 ## Code Style Guidelines
@@ -77,6 +94,22 @@ app/
 │   └── widgets/     # Reusable UI components
 ├── database/        # Database connection & migrations
 └── utils/           # Utilities (config, etc.)
+
+tests/
+├── test_*.py        # Backend unit tests
+└── ui/              # UI integration tests
+    ├── run_all_ui_tests.py
+    ├── base_ui_test.py
+    └── test_*_crud.py
+
+alembic/             # Database migrations
+├── versions/        # Migration files
+└── env.py
+
+data/
+├── gestion_locative.db  # SQLite database
+├── backups/             # Local backups
+└── documents/           # Attached documents
 ```
 
 ### Import Style
@@ -212,7 +245,7 @@ def print_section(title: str):
 
 ### Main Application Entry
 - Entry point: `main.py`
-- Main window class: `MainWindow` in `main.py:30`
+- Main window class: `MainWindow` in `main.py`
 - Navigation via sidebar with `QStackedWidget`
 
 ### Database Connection
@@ -235,14 +268,18 @@ def print_section(title: str):
 1. Run tests: `python run_tests.py`
 2. Make changes following code style guidelines
 3. Test individual components: `python tests/test_<component>.py`
-4. Run full test suite to verify integration
-5. Update documentation if API changes
-6. Build executable if needed: `pyinstaller --clean gestion_locative.spec`
+4. Run linting and type checking: `ruff check . && mypy app/`
+5. Run full test suite to verify integration
+6. Update documentation if API changes
+7. Build executable if needed: `pyinstaller --clean gestion_locative.spec`
 
 ## Special Considerations
 
-- Windows executable build includes hardcoded paths in `.spec` file
-- Database migrations via Alembic (see `app.database.migrations`)
+- Windows executable build uses `.spec` file for PyInstaller configuration
+- Database migrations via Alembic (see `alembic/versions/`)
 - PDF receipts generation uses ReportLab + Jinja2 templates
 - Google Drive backup integration requires OAuth 2.0 setup
 - Qt signals must be properly connected for auto-refresh functionality
+- Auto-updater checks GitHub releases on startup (after 5 seconds delay)
+- Config and database migrations run automatically on app startup
+- See RELEASE_GUIDE.md for complete release workflow
