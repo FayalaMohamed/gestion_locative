@@ -55,7 +55,7 @@ jobs:
           mkdir -p data
       
       - name: Initialize database
-        run: python app/init_db.py
+        run: python app/init_db.py --empty
       
       - name: Run non-UI tests
         run: |
