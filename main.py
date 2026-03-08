@@ -330,12 +330,15 @@ class MainWindow(QMainWindow):
                 )
                 
                 if reply == QMessageBox.StandardButton.Yes:
-                    # Get download URL from assets
+                    # Get download URL from assets - look for .exe file
                     assets = data.get('assets', [])
-                    if assets and len(assets) > 0:
-                        download_url = assets[0].get('browser_download_url')
-                    else:
-                        download_url = None
+                    download_url = None
+                    
+                    for asset in assets:
+                        asset_name = asset.get('name', '').lower()
+                        if asset_name.endswith('.exe'):
+                            download_url = asset.get('browser_download_url')
+                            break
                     
                     if download_url:
                         self.download_and_install_update(download_url)
@@ -343,8 +346,10 @@ class MainWindow(QMainWindow):
                         QMessageBox.warning(
                             self,
                             "Erreur",
-                            "Impossible de trouver le fichier de mise à jour.\n"
-                            "Veuillez vérifier manuellement sur GitHub."
+                            "Impossible de trouver le fichier de mise à jour (.exe).\n\n"
+                            "Assurez-vous que le fichier .exe a été attaché à la release sur GitHub.\n\n"
+                            f"Vous pouvez télécharger manuellement depuis:\n"
+                            f"https://github.com/{GITHUB_REPO}/releases/latest"
                         )
             else:
                 # Up to date
@@ -382,6 +387,17 @@ class MainWindow(QMainWindow):
     def download_and_install_update(self, download_url: str):
         """Download update and auto-restart"""
         try:
+            # Check if running as compiled executable
+            if not getattr(sys, 'frozen', False):
+                QMessageBox.warning(
+                    self,
+                    "Information",
+                    "La mise à jour automatique n'est disponible que pour la version compilée.\n\n"
+                    f"Téléchargez la nouvelle version depuis:\n"
+                    f"https://github.com/{GITHUB_REPO}/releases/latest"
+                )
+                return
+            
             # Show downloading message
             downloading_msg = QMessageBox(self)
             downloading_msg.setWindowTitle("Téléchargement")
@@ -407,67 +423,149 @@ class MainWindow(QMainWindow):
             
             downloading_msg.close()
             
-            # Before creating batch script, backup the database
-            data_dir = Path(__file__).parent / "data"
-            db_path = data_dir / "gestion_locative.db"
-            backup_path = data_dir / f"gestion_locative_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
-
-            if db_path.exists():
+            # Get current executable path and directory
+            current_exe_path = sys.executable
+            current_exe_dir = os.path.dirname(current_exe_path)
+            
+            # Find database path - check multiple locations
+            db_path = None
+            possible_db_paths = [
+                Path(current_exe_dir) / "data" / "gestion_locative.db",
+                Path.cwd() / "data" / "gestion_locative.db",
+            ]
+            
+            for path in possible_db_paths:
+                if path.exists():
+                    db_path = path
+                    break
+            
+            backup_path = None
+            if db_path and db_path.exists():
                 import shutil
+                backup_dir = db_path.parent
+                backup_path = backup_dir / f"gestion_locative_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
                 shutil.copy2(db_path, backup_path)
                 print(f"Database backed up to: {backup_path}")
             
-            # Get current executable path
-            current_exe_path = sys.executable
+            # Get the actual exe name for taskkill
+            exe_name = os.path.basename(current_exe_path)
             
-            # Create batch script for update
-            if db_path.exists():
-                batch_script = f'''@echo off
-echo Mise a jour en cours...
-echo Base de donnees sauvegardee dans: {backup_path}
-timeout /t 2 /nobreak >nul
-taskkill /F /IM "GestionLocativePro.exe" 2>nul
-timeout /t 1 /nobreak >nul
-copy /Y "{temp_exe_path}" "{current_exe_path}"
+            # Create log file for debugging
+            log_path = os.path.join(temp_dir, "update_log.txt")
+            
+            # Create batch script for update with logging
+            batch_script = f'''@echo off
+set LOG_FILE={log_path}
+echo Update started at %DATE% %TIME% > "%LOG_FILE%"
+echo Temp exe: {temp_exe_path} >> "%LOG_FILE%"
+echo Target exe: {current_exe_path} >> "%LOG_FILE%"
+echo Exe name: {exe_name} >> "%LOG_FILE%"
+
+echo.
+echo ========================================
+echo   MISE A JOUR EN COURS
+echo ========================================
+echo.
+echo Fermeture de l'application dans 5 secondes...
+timeout /t 5 /nobreak
+
+echo.
+echo Arret du processus {exe_name}...
+echo Killing process {exe_name}... >> "%LOG_FILE%"
+taskkill /F /IM "{exe_name}" 2>>"%LOG_FILE%"
 if %errorlevel% == 0 (
-    echo Mise a jour terminee. Redemarrage...
-    start "" "{current_exe_path}"
+    echo Processus arrete avec succes.
+    echo Process killed successfully >> "%LOG_FILE%"
 ) else (
-    echo Erreur lors de la mise a jour.
-    pause
+    echo Aucun processus a arreter ou deja ferme.
+    echo No process to kill or already closed >> "%LOG_FILE%"
 )
-del "%~f0"'''
-            else:
-                batch_script = f'''@echo off
-echo Mise a jour en cours...
-timeout /t 2 /nobreak >nul
-taskkill /F /IM "GestionLocativePro.exe" 2>nul
-timeout /t 1 /nobreak >nul
-copy /Y "{temp_exe_path}" "{current_exe_path}"
-if %errorlevel% == 0 (
-    echo Mise a jour terminee. Redemarrage...
+
+echo.
+echo Attente de 3 secondes pour liberation des fichiers...
+timeout /t 3 /nobreak
+
+echo.
+echo Copie du nouveau fichier...
+echo Copying file... >> "%LOG_FILE%"
+copy /Y "{temp_exe_path}" "{current_exe_path}" >> "%LOG_FILE%" 2>&1
+set COPY_RESULT=%errorlevel%
+
+if %COPY_RESULT% == 0 (
+    echo.
+    echo Copie reussie!
+    echo Copy successful >> "%LOG_FILE%"
+    
+    echo.
+    echo Verification du fichier copie...
+    if exist "{current_exe_path}" (
+        echo Fichier verifie avec succes.
+        echo File verified >> "%LOG_FILE%"
+    ) else (
+        echo ERREUR: Le fichier n'existe pas apres copie!
+        echo ERROR: File does not exist after copy >> "%LOG_FILE%"
+        goto :error
+    )
+    
+    echo.
+    echo Attente de 2 secondes avant redemarrage...
+    timeout /t 2 /nobreak
+    
+    echo.
+    echo Demarrage de la nouvelle version...
+    echo Starting new version... >> "%LOG_FILE%"
     start "" "{current_exe_path}"
+    
+    echo.
+    echo ========================================
+    echo   MISE A JOUR TERMINEE AVEC SUCCES!
+    echo ========================================
+    echo Update completed successfully >> "%LOG_FILE%"
+    timeout /t 2 /nobreak
+    goto :cleanup
 ) else (
-    echo Erreur lors de la mise a jour.
-    pause
+    goto :error
 )
-del "%~f0"'''
+
+:error
+echo.
+echo ========================================
+echo   ERREUR LORS DE LA MISE A JOUR
+echo ========================================
+echo.
+echo Code d'erreur de copie: %COPY_RESULT%
+echo Copy failed with error %COPY_RESULT% >> "%LOG_FILE%"
+echo.
+echo Le fichier de log se trouve ici:
+echo {log_path}
+echo.
+echo Vous pouvez telecharger manuellement la mise a jour depuis:
+echo https://github.com/{GITHUB_REPO}/releases/latest
+echo.
+pause
+
+:cleanup
+echo Cleaning up... >> "%LOG_FILE%"
+del "{temp_exe_path}" 2>>"%LOG_FILE%"
+del "%~f0" 2>>"%LOG_FILE%"
+'''
             
             batch_path = os.path.join(temp_dir, "update_script.bat")
             with open(batch_path, 'w') as f:
                 f.write(batch_script)
             
             # Show success message
+            backup_info = f"\n\nSauvegarde de la base de données: {backup_path}" if backup_path else ""
             QMessageBox.information(
                 self,
                 "Mise à jour",
-                "Mise à jour téléchargée avec succès!\n\n"
+                f"Mise à jour téléchargée avec succès!{backup_info}\n\n"
                 "L'application va se fermer et se redémarrer automatiquement."
             )
             
-            # Run the batch script (hidden) and quit
-            subprocess.Popen([batch_path], shell=True, creationflags=subprocess.CREATE_NO_WINDOW)
-            QTimer.singleShot(500, QApplication.quit)
+            # Run the batch script and quit
+            subprocess.Popen([batch_path], shell=True)
+            QTimer.singleShot(1000, QApplication.quit)
             
         except Exception as e:
             QMessageBox.warning(
@@ -499,14 +597,20 @@ del "%~f0"'''
                 if self._is_newer_version(latest_version, APP_VERSION):
                     # Get download URL from assets
                     assets = data.get('assets', [])
-                    if assets and len(assets) > 0:
-                        download_url = assets[0].get('browser_download_url')
-                    else:
-                        download_url = None
+                    download_url = None
+                    
+                    # Look for .exe asset
+                    for asset in assets:
+                        asset_name = asset.get('name', '').lower()
+                        if asset_name.endswith('.exe'):
+                            download_url = asset.get('browser_download_url')
+                            break
                     
                     if download_url:
                         # Show notification on main thread
                         QTimer.singleShot(0, lambda: self.show_update_notification(latest_version, download_url))
+                    else:
+                        print(f"Update available (v{latest_version}) but no .exe asset found in release")
                         
             except Exception as e:
                 # Silently fail - don't show errors during silent check
