@@ -135,7 +135,7 @@ def create_sample_data() -> None:
         
         # Create sample contrats (avec plusieurs bureaux possibles)
         contrat1 = Contrat(
-            Locataire_id=locataire1.id,
+            locataire_id=locataire1.id,
             date_debut=datetime(2024, 1, 1).date(),
             montant_premier_mois=Decimal("1500.000"),
             montant_mensuel=Decimal("1500.000"),
@@ -143,11 +143,11 @@ def create_sample_data() -> None:
             montant_pas_de_porte=Decimal("0.000"),
             compteur_steg="STEG-2024-001",
             compteur_sonede="SONEDE-2024-001",
-            est_resilie_col=False,
+            est_resilie=False,
             bureaux=[bureau1]
         )
         contrat2 = Contrat(
-            Locataire_id=locataire2.id,
+            locataire_id=locataire2.id,
             date_debut=datetime(2024, 3, 15).date(),
             montant_premier_mois=Decimal("1800.000"),
             montant_mensuel=Decimal("1800.000"),
@@ -155,7 +155,7 @@ def create_sample_data() -> None:
             montant_pas_de_porte=Decimal("5000.000"),
             compteur_steg="STEG-2024-002",
             compteur_sonede="SONEDE-2024-002",
-            est_resilie_col=False,
+            est_resilie=False,
             bureaux=[bureau3]
         )
         session.add_all([contrat1, contrat2])
@@ -163,7 +163,7 @@ def create_sample_data() -> None:
         
         # Create sample payments
         paiement1 = Paiement(
-            Locataire_id=locataire1.id,
+            locataire_id=locataire1.id,
             contrat_id=contrat1.id,
             type_paiement=TypePaiement.CAUTION,
             montant_total=Decimal("3000.000"),
@@ -171,7 +171,7 @@ def create_sample_data() -> None:
             commentaire="Paiement de la caution"
         )
         paiement2 = Paiement(
-            Locataire_id=locataire1.id,
+            locataire_id=locataire1.id,
             contrat_id=contrat1.id,
             type_paiement=TypePaiement.LOYER,
             montant_total=Decimal("1650.000"),
@@ -184,7 +184,7 @@ def create_sample_data() -> None:
             commentaire="Loyer Janvier 2024 avec frais"
         )
         paiement3 = Paiement(
-            Locataire_id=locataire1.id,
+            locataire_id=locataire1.id,
             contrat_id=contrat1.id,
             type_paiement=TypePaiement.LOYER,
             montant_total=Decimal("1600.000"),

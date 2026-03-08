@@ -196,14 +196,14 @@ class ContratView(BaseView):
                 # Apply locataire filter
                 loc_id = self.locataire_combo.currentData()
                 if loc_id:
-                    query = query.filter(Contrat.Locataire_id == loc_id)
+                    query = query.filter(Contrat.locataire_id == loc_id)
                     
                 # Apply statut filter
                 statut_value = self.statut_combo.currentData()
                 if statut_value == "actif":
-                    query = query.filter(Contrat.est_resilie_col == False)
+                    query = query.filter(Contrat.est_resilie == False)
                 elif statut_value == "resilie":
-                    query = query.filter(Contrat.est_resilie_col == True)
+                    query = query.filter(Contrat.est_resilie == True)
                 
                 # Apply search filter (case-insensitive search across multiple fields)
                 search_text = self.search_edit.text().strip().lower()
@@ -252,7 +252,7 @@ class ContratView(BaseView):
                     
                     self.table.setItem(row, 3, QTableWidgetItem(str(ctr.date_debut)))
                     self.table.setItem(row, 4, QTableWidgetItem(f"{ctr.montant_mensuel} TND"))
-                    self.table.setItem(row, 5, QTableWidgetItem("Résilié" if ctr.est_resilie_col else "Actif"))
+                    self.table.setItem(row, 5, QTableWidgetItem("Résilié" if ctr.est_resilie else "Actif"))
                     
                     for col in range(6):
                         self.table.item(row, col).setFlags(
@@ -360,7 +360,7 @@ class ContratView(BaseView):
                 if locataire_id:
                     # Get distinct immeubles where this locataire has contracts
                     immeubles = session.query(Immeuble).join(Bureau).join(Contrat.bureaux).filter(
-                        Contrat.Locataire_id == locataire_id
+                        Contrat.locataire_id == locataire_id
                     ).distinct().order_by(Immeuble.nom).all()
                 else:
                     # Get all immeubles
@@ -382,18 +382,15 @@ class ContratView(BaseView):
     
     def on_search_text_changed(self):
         """Handle search text change with debounce"""
-        # Use a timer for debouncing search input
         from PySide6.QtCore import QTimer
         
-        # Cancel any existing timer
-        if hasattr(self, '_search_timer'):
-            self._search_timer.stop()
+        if not hasattr(self, '_search_timer'):
+            self._search_timer = QTimer(self)
+            self._search_timer.setSingleShot(True)
+            self._search_timer.timeout.connect(self.load_data)
         
-        # Create new timer for debounce
-        self._search_timer = QTimer(self)
-        self._search_timer.setSingleShot(True)
-        self._search_timer.timeout.connect(self.load_data)
-        self._search_timer.start(300)  # 300ms debounce
+        self._search_timer.stop()
+        self._search_timer.start(300)
             
     def load_impayes(self, contrat_id, label, list_widget, date_debut, est_resilie, date_resiliation):
         try:
@@ -463,7 +460,7 @@ class ContratView(BaseView):
                     current_height = list_widget.maximumHeight()
                     if current_height == 0:
                         list_widget.setMaximumHeight(150)
-                        self.load_impayes(contrat_id, label, list_widget, ctr.date_debut, ctr.est_resilie_col, ctr.date_resiliation)
+                        self.load_impayes(contrat_id, label, list_widget, ctr.date_debut, ctr.est_resilie, ctr.date_resiliation)
                     else:
                         list_widget.setMaximumHeight(0)
         except Exception as e:
@@ -471,11 +468,14 @@ class ContratView(BaseView):
             
     def on_selection_changed(self):
         selected = self.table.selectedItems()
+        self.btn_browse_docs.setEnabled(bool(selected))
         if not selected:
             self.clear_details()
+            self._current_contrat_id = None
             return
-            
+             
         item_id = int(self.table.item(selected[0].row(), 0).text())
+        self._current_contrat_id = item_id
         self.show_details(item_id)
         
     def clear_details(self):
@@ -534,11 +534,11 @@ class ContratView(BaseView):
                 if ctr.compteur_sonede:
                     info_layout.addRow("Compteur SONEDE:", QLabel(ctr.compteur_sonede))
                 
-                info_layout.addRow("Statut:", QLabel("Résilié" if ctr.est_resilie_col else "Actif"))
+                info_layout.addRow("Statut:", QLabel("Résilié" if ctr.est_resilie else "Actif"))
                 
-                if ctr.est_resilie_col and ctr.date_resiliation:
+                if ctr.est_resilie and ctr.date_resiliation:
                     info_layout.addRow("Date résiliation:", QLabel(str(ctr.date_resiliation)))
-                if ctr.est_resilie_col and ctr.motif_resiliation:
+                if ctr.est_resilie and ctr.motif_resiliation:
                     info_layout.addRow("Motif résiliation:", QLabel(ctr.motif_resiliation))
                 
                 if ctr.conditions:
@@ -564,7 +564,7 @@ class ContratView(BaseView):
                 impayes_list.setStyleSheet("background-color: #f8f9fa; border-radius: 4px;")
                 self.detail_layout.addWidget(impayes_list)
                 
-                self.load_impayes(contrat_id, mois_impayes_label, impayes_list, ctr.date_debut, ctr.est_resilie_col, ctr.date_resiliation)
+                self.load_impayes(contrat_id, mois_impayes_label, impayes_list, ctr.date_debut, ctr.est_resilie, ctr.date_resiliation)
                 
                 grid_label = QLabel(f"\nGrille des Paiements:")
                 grid_label.setStyleSheet("font-weight: bold; margin-top: 15px;")
@@ -629,7 +629,7 @@ class ContratView(BaseView):
             grid_layout.addWidget(label, 0, col)
             
         contract_start = contrat.date_debut
-        contract_resilie = contrat.est_resilie_col
+        contract_resilie = contrat.est_resilie
         contract_resiliation_date = contrat.date_resiliation
         
         for col in range(months_to_show):
@@ -738,18 +738,12 @@ class ContratView(BaseView):
                     repo = ContratRepository(session)
                     ctr = repo.get_by_id(item_id)
                     if ctr:
-                        paiement_count = session.query(func.count(Paiement.id)).filter(Paiement.contrat_id == item_id).scalar()
-                        if paiement_count > 0:
-                            QMessageBox.warning(self, "Suppression impossible", 
-                                f"Ce contrat a {paiement_count} paiement(s) associé(s). Supprimez d'abord les paiements associés.")
-                            return
-                        
-                        loc_id = ctr.Locataire_id
+                        loc_id = ctr.locataire_id
                         repo.delete(ctr)
                         
                         active_count = session.query(func.count(Contrat.id)).filter(
-                            Contrat.Locataire_id == loc_id,
-                            Contrat.est_resilie_col == False
+                            Contrat.locataire_id == loc_id,
+                            Contrat.est_resilie == False
                         ).scalar()
                         if active_count == 0:
                             loc_repo = session.query(Locataire).get(loc_id)
@@ -785,13 +779,12 @@ class ContratView(BaseView):
         if reply == QMessageBox.Yes:
             try:
                 from app.database.connection import get_database
-                from app.models.entities import Contrat, Paiement, Locataire, StatutLocataire
+                from app.models.entities import Contrat, Locataire, StatutLocataire
                 from app.repositories.contrat_repository import ContratRepository
                 from sqlalchemy import func
 
                 db = get_database()
                 deleted_count = 0
-                skipped_count = 0
 
                 with db.session_scope() as session:
                     repo = ContratRepository(session)
@@ -799,19 +792,13 @@ class ContratView(BaseView):
                     for item_id in item_ids:
                         ctr = repo.get_by_id(item_id)
                         if ctr:
-                            paiement_count = session.query(func.count(Paiement.id)).filter(Paiement.contrat_id == item_id).scalar()
-
-                            if paiement_count > 0:
-                                skipped_count += 1
-                                continue
-
-                            loc_id = ctr.Locataire_id
+                            loc_id = ctr.locataire_id
                             repo.delete(ctr)
                             deleted_count += 1
 
                             active_count = session.query(func.count(Contrat.id)).filter(
-                                Contrat.Locataire_id == loc_id,
-                                Contrat.est_resilie_col == False
+                                Contrat.locataire_id == loc_id,
+                                Contrat.est_resilie == False
                             ).scalar()
                             if active_count == 0:
                                 loc = session.query(Locataire).get(loc_id)
@@ -821,24 +808,8 @@ class ContratView(BaseView):
                 self.load_data()
                 self.data_changed.emit()
 
-                if skipped_count > 0:
-                    QMessageBox.warning(self, "Suppression partielle",
-                        f"{deleted_count} contrat(s) supprimé(s), {skipped_count} non supprimé(s) car ils ont des paiements associés.")
-
             except Exception as e:
                 QMessageBox.critical(self, "Erreur", f"Erreur: {str(e)}")
-                
-    def on_selection_changed(self):
-        selected = self.table.selectedItems()
-        self.btn_browse_docs.setEnabled(bool(selected))
-        if not selected:
-            self.clear_details()
-            self._current_contrat_id = None
-            return
-             
-        item_id = int(self.table.item(selected[0].row(), 0).text())
-        self._current_contrat_id = item_id
-        self.show_details(item_id)
         
     def on_item_double_clicked(self, item):
         """Handle double-click on contract table item"""
@@ -891,18 +862,19 @@ class ContratView(BaseView):
             from app.ui.dialogs.document_browser_dialog import DocumentBrowserDialog
             
             db = get_database()
-            doc_service = DocumentService(db.get_session())
-            
-            dialog = DocumentBrowserDialog(
-                entity_type="contrat",
-                entity_id=item_id,
-                entity_name=item_name,
-                doc_service=doc_service,
-                parent=self
-            )
-            
-            dialog.exec()
+            with db.session_scope() as session:
+                doc_service = DocumentService(session)
                 
+                dialog = DocumentBrowserDialog(
+                    entity_type="contrat",
+                    entity_id=item_id,
+                    entity_name=item_name,
+                    doc_service=doc_service,
+                    parent=self
+                )
+                
+                dialog.exec()
+                    
         except Exception as e:
             QMessageBox.critical(self, "Erreur", f"Erreur: {str(e)}")
 
@@ -941,25 +913,30 @@ class ContratDialog(QDialog):
         form_layout.setSpacing(15)
         
         self.locataire_combo = QComboBox()
+        self.locataire_combo.setObjectName("locataire_combo")
         self.load_locataires()
         form_layout.addRow("Locataire*:", self.locataire_combo)
         
         self.bureaux_list = QListWidget()
+        self.bureaux_list.setObjectName("bureaux_list")
         self.bureaux_list.setSelectionMode(QListWidget.MultiSelection)
         self.bureaux_list.setMinimumHeight(100)
         form_layout.addRow("Bureaux*:", self.bureaux_list)
         
         self.date_debut = QDateEdit()
+        self.date_debut.setObjectName("date_debut")
         self.date_debut.setCalendarPopup(True)
         self.date_debut.setDate(QDate.currentDate())
         form_layout.addRow("Date début*:", self.date_debut)
         
         self.date_derniere_augmentation = QDateEdit()
+        self.date_derniere_augmentation.setObjectName("date_derniere_augmentation")
         self.date_derniere_augmentation.setCalendarPopup(True)
         self.date_derniere_augmentation.setDate(QDate.currentDate())
         form_layout.addRow("Dernière augmentation:", self.date_derniere_augmentation)
         
         self.montant_premier_mois = QDoubleSpinBox()
+        self.montant_premier_mois.setObjectName("montant_premier_mois")
         self.montant_premier_mois.setMinimum(0)
         self.montant_premier_mois.setMaximum(1000000)
         self.montant_premier_mois.setSuffix(" TND")
@@ -967,6 +944,7 @@ class ContratDialog(QDialog):
         form_layout.addRow("Premier mois*:", self.montant_premier_mois)
         
         self.montant_mensuel = QDoubleSpinBox()
+        self.montant_mensuel.setObjectName("montant_mensuel")
         self.montant_mensuel.setMinimum(0)
         self.montant_mensuel.setMaximum(1000000)
         self.montant_mensuel.setSuffix(" TND")
@@ -974,6 +952,7 @@ class ContratDialog(QDialog):
         form_layout.addRow("Mensuel*:", self.montant_mensuel)
         
         self.montant_caution = QDoubleSpinBox()
+        self.montant_caution.setObjectName("montant_caution")
         self.montant_caution.setMinimum(0)
         self.montant_caution.setMaximum(1000000)
         self.montant_caution.setSuffix(" TND")
@@ -981,6 +960,7 @@ class ContratDialog(QDialog):
         form_layout.addRow("Caution:", self.montant_caution)
         
         self.montant_pas_de_porte = QDoubleSpinBox()
+        self.montant_pas_de_porte.setObjectName("montant_pas_de_porte")
         self.montant_pas_de_porte.setMinimum(0)
         self.montant_pas_de_porte.setMaximum(1000000)
         self.montant_pas_de_porte.setSuffix(" TND")
@@ -988,28 +968,34 @@ class ContratDialog(QDialog):
         form_layout.addRow("Pas de porte:", self.montant_pas_de_porte)
         
         self.compteur_steg_edit = QLineEdit()
+        self.compteur_steg_edit.setObjectName("compteur_steg_edit")
         form_layout.addRow("Compteur STEG:", self.compteur_steg_edit)
         
         self.compteur_sonede_edit = QLineEdit()
+        self.compteur_sonede_edit.setObjectName("compteur_sonede_edit")
         form_layout.addRow("Compteur SONEDE:", self.compteur_sonede_edit)
         
         self.conditions_edit = QTextEdit()
+        self.conditions_edit.setObjectName("conditions_edit")
         self.conditions_edit.setMaximumHeight(80)
         form_layout.addRow("Conditions:", self.conditions_edit)
         
         self.resiliation_group = QGroupBox("Résiliation")
         resiliation_layout = QFormLayout()
         
-        self.est_resilie_col = QCheckBox("Contrat résilié")
-        resiliation_layout.addRow("", self.est_resilie_col)
+        self.est_resilie = QCheckBox("Contrat résilié")
+        self.est_resilie.setObjectName("est_resilie")
+        resiliation_layout.addRow("", self.est_resilie)
         
         self.date_resiliation = QDateEdit()
+        self.date_resiliation.setObjectName("date_resiliation")
         self.date_resiliation.setCalendarPopup(True)
         self.date_resiliation.setDate(QDate.currentDate())
         self.date_resiliation.setEnabled(False)
         resiliation_layout.addRow("Date résiliation:", self.date_resiliation)
         
         self.motif_resiliation_edit = QTextEdit()
+        self.motif_resiliation_edit.setObjectName("motif_resiliation_edit")
         self.motif_resiliation_edit.setMaximumHeight(60)
         self.motif_resiliation_edit.setEnabled(False)
         resiliation_layout.addRow("Motif résiliation:", self.motif_resiliation_edit)
@@ -1032,8 +1018,8 @@ class ContratDialog(QDialog):
         layout.addWidget(splitter)
         
     def setup_connections(self):
-        self.est_resilie_col.toggled.connect(self.date_resiliation.setEnabled)
-        self.est_resilie_col.toggled.connect(self.motif_resiliation_edit.setEnabled)
+        self.est_resilie.toggled.connect(self.date_resiliation.setEnabled)
+        self.est_resilie.toggled.connect(self.motif_resiliation_edit.setEnabled)
         
     def load_locataires(self):
         try:
@@ -1069,7 +1055,7 @@ class ContratDialog(QDialog):
                         active_bureaux = session.query(Bureau).options(
                             joinedload(Bureau.immeuble)
                         ).filter(
-                            ~Bureau.contrats.any(Contrat.est_resilie_col == False)
+                            ~Bureau.contrats.any(Contrat.est_resilie == False)
                         ).order_by(Bureau.numero).all()
                         
                         existing_bureaux = session.query(Bureau).options(
@@ -1083,7 +1069,7 @@ class ContratDialog(QDialog):
                     all_bureaux = session.query(Bureau).options(
                         joinedload(Bureau.immeuble)
                     ).filter(
-                        ~Bureau.contrats.any(Contrat.est_resilie_col == False)
+                        ~Bureau.contrats.any(Contrat.est_resilie == False)
                     ).order_by(Bureau.numero).all()
                 
                 self.bureaux_list.clear()
@@ -1111,7 +1097,7 @@ class ContratDialog(QDialog):
             with db.session_scope() as session:
                 ctr = session.query(Contrat).get(self.contrat_id)
                 if ctr:
-                    idx = self.locataire_combo.findData(ctr.Locataire_id)
+                    idx = self.locataire_combo.findData(ctr.locataire_id)
                     if idx >= 0:
                         self.locataire_combo.setCurrentIndex(idx)
                         
@@ -1139,7 +1125,7 @@ class ContratDialog(QDialog):
                     self.compteur_sonede_edit.setText(ctr.compteur_sonede or "")
                     self.conditions_edit.setText(ctr.conditions or "")
                     
-                    self.est_resilie_col.setChecked(ctr.est_resilie_col or False)
+                    self.est_resilie.setChecked(ctr.est_resilie or False)
                     if ctr.date_resiliation:
                         self.date_resiliation.setDate(QDate(
                             ctr.date_resiliation.year, 
@@ -1152,6 +1138,8 @@ class ContratDialog(QDialog):
             QMessageBox.critical(self, "Erreur", f"Erreur: {str(e)}")
             
     def validate_and_accept(self):
+        from datetime import date as py_date
+        
         loc_id = self.locataire_combo.currentData()
         
         if loc_id is None:
@@ -1162,25 +1150,48 @@ class ContratDialog(QDialog):
         if not selected_bureaux:
             QMessageBox.warning(self, "Validation", "Sélectionnez au moins un bureau")
             return
+        
+        date_debut = self.date_debut.date().toPython()
+        date_derniere_augmentation = self.date_derniere_augmentation.date().toPython() if self.date_derniere_augmentation.date().isValid() else None
+        date_resiliation = self.date_resiliation.date().toPython() if self.date_resiliation.date().isValid() else None
+        est_resilie = self.est_resilie.isChecked()
+        
+        if date_derniere_augmentation:
+            if date_derniere_augmentation > py_date.today():
+                QMessageBox.warning(self, "Validation", "La date de dernière augmentation ne peut pas être dans le futur")
+                return
+            if date_derniere_augmentation < date_debut:
+                QMessageBox.warning(self, "Validation", "La date de dernière augmentation ne peut pas être antérieure à la date de début")
+                return
+        
+        if est_resilie and date_resiliation:
+            if date_resiliation < date_debut:
+                QMessageBox.warning(self, "Validation", "La date de résiliation ne peut pas être antérieure à la date de début")
+                return
             
         try:
             from app.database.connection import get_database
             from app.models.entities import Contrat, Bureau, Locataire, StatutLocataire
-            from app.repositories.contrat_repository import ContratRepository
+            from app.repositories.contrat_repository import ContratRepository, ContratValidationError
+            from app.repositories.bureau_repository import BureauRepository
             from sqlalchemy import func
             
             db = get_database()
             with db.session_scope() as session:
                 if self.contrat_id:
                     repo = ContratRepository(session)
+                    bureau_repo = BureauRepository(session)
                     ctr = repo.get_by_id(self.contrat_id)
                     if ctr:
-                        old_resilie = ctr.est_resilie_col
-                        old_loc_id = ctr.Locataire_id
+                        old_resilie = ctr.est_resilie
+                        old_loc_id = ctr.locataire_id
+                        old_bureau_ids = {b.id for b in ctr.bureaux}
+                        new_bureau_ids = set(selected_bureaux)
+                        
                         repo.update(ctr,
-                            Locataire_id=loc_id,
+                            locataire_id=loc_id,
                             date_debut=self.date_debut.date().toPython(),
-                            est_resilie_col=self.est_resilie_col.isChecked(),
+                            est_resilie=self.est_resilie.isChecked(),
                             date_derniere_augmentation=self.date_derniere_augmentation.date().toPython() if self.date_derniere_augmentation.date().isValid() else None,
                             montant_premier_mois=self.montant_premier_mois.value(),
                             montant_mensuel=self.montant_mensuel.value(),
@@ -1193,39 +1204,92 @@ class ContratDialog(QDialog):
                             motif_resiliation=self.motif_resiliation_edit.toPlainText().strip() or None
                         )
                         
-                        selected_bureaux_objs = session.query(Bureau).filter(Bureau.id.in_(selected_bureaux)).all()
-                        ctr.bureaux = selected_bureaux_objs
+                        ctr.bureaux.clear()
+                        for bureau in session.query(Bureau).filter(Bureau.id.in_(selected_bureaux)).all():
+                            ctr.bureaux.append(bureau)
+                        
+                        new_resilie = self.est_resilie.isChecked()
+                        
+                        if new_resilie and not old_resilie:
+                            for bureau in selected_bureaux_objs:
+                                other_active = session.query(Contrat).join(
+                                    Contrat.bureaux
+                                ).filter(
+                                    Bureau.id == bureau.id,
+                                    Contrat.id != self.contrat_id,
+                                    Contrat.est_resilie == False
+                                ).first()
+                                
+                                if not other_active:
+                                    bureau.est_disponible = True
+                        elif not new_resilie and old_resilie:
+                            for bureau in selected_bureaux_objs:
+                                bureau.est_disponible = False
+                        else:
+                            removed_bureau_ids = old_bureau_ids - new_bureau_ids
+                            added_bureau_ids = new_bureau_ids - old_bureau_ids
+                            
+                            for bid in removed_bureau_ids:
+                                bureau = bureau_repo.get_by_id(bid)
+                                if bureau:
+                                    other_active = session.query(Contrat).join(
+                                        Contrat.bureaux
+                                    ).filter(
+                                        Bureau.id == bid,
+                                        Contrat.id != self.contrat_id,
+                                        Contrat.est_resilie == False
+                                    ).first()
+                                    
+                                    if not other_active:
+                                        bureau.est_disponible = True
+                            
+                            for bid in added_bureau_ids:
+                                bureau = bureau_repo.get_by_id(bid)
+                                if bureau:
+                                    bureau.est_disponible = False
+                        
                         session.flush()
                         
                         for check_loc_id in set([loc_id, old_loc_id]):
                             if check_loc_id:
                                 active_count = session.query(func.count(Contrat.id)).filter(
-                                    Contrat.Locataire_id == check_loc_id,
-                                    Contrat.est_resilie_col == False
+                                    Contrat.locataire_id == check_loc_id,
+                                    Contrat.est_resilie == False
                                 ).scalar()
                                 loc = session.query(Locataire).get(check_loc_id)
                                 if loc:
                                     loc.statut = StatutLocataire.ACTIF if active_count > 0 else StatutLocataire.HISTORIQUE
                 else:
                     repo = ContratRepository(session)
-                    ctr = repo.create(
-                        Locataire_id=loc_id,
-                        date_debut=self.date_debut.date().toPython(),
-                        date_derniere_augmentation=self.date_derniere_augmentation.date().toPython() if self.date_derniere_augmentation.date().isValid() else None,
-                        montant_premier_mois=self.montant_premier_mois.value(),
-                        montant_mensuel=self.montant_mensuel.value(),
-                        montant_caution=self.montant_caution.value(),
-                        montant_pas_de_porte=self.montant_pas_de_porte.value(),
-                        compteur_steg=self.compteur_steg_edit.text().strip() or None,
-                        compteur_sonede=self.compteur_sonede_edit.text().strip() or None,
-                        conditions=self.conditions_edit.toPlainText().strip() or None,
-                        est_resilie_col=self.est_resilie_col.isChecked(),
-                        date_resiliation=self.date_resiliation.date().toPython() if self.date_resiliation.date().isValid() else None,
-                        motif_resiliation=self.motif_resiliation_edit.toPlainText().strip() or None
-                    )
+                    bureau_repo = BureauRepository(session)
                     
-                    selected_bureaux_objs = session.query(Bureau).filter(Bureau.id.in_(selected_bureaux)).all()
-                    ctr.bureaux = selected_bureaux_objs
+                    bureaux_objs = [bureau_repo.get_by_id(bid) for bid in selected_bureaux]
+                    
+                    try:
+                        ctr, warnings = repo.create_with_validation(
+                            locataire_id=loc_id,
+                            date_debut=self.date_debut.date().toPython(),
+                            montant_mensuel=float(self.montant_mensuel.value()),
+                            montant_premier_mois=self.montant_premier_mois.value(),
+                            montant_caution=self.montant_caution.value(),
+                            date_derniere_augmentation=self.date_derniere_augmentation.date().toPython() if self.date_derniere_augmentation.date().isValid() else None,
+                            montant_pas_de_porte=self.montant_pas_de_porte.value(),
+                            compteur_steg=self.compteur_steg_edit.text().strip() or None,
+                            compteur_sonede=self.compteur_sonede_edit.text().strip() or None,
+                            conditions=self.conditions_edit.toPlainText().strip() or None,
+                            est_resilie=self.est_resilie.isChecked(),
+                            date_resiliation=self.date_resiliation.date().toPython() if self.date_resiliation.date().isValid() else None,
+                            motif_resiliation=self.motif_resiliation_edit.toPlainText().strip() or None,
+                            bureaux=bureaux_objs
+                        )
+                        
+                        if warnings:
+                            warning_msg = "\n".join(warnings)
+                            QMessageBox.warning(self, "Avertissements", warning_msg)
+                        
+                    except ContratValidationError as e:
+                        QMessageBox.warning(self, "Erreur de validation", str(e))
+                        return
                     
                     loc = session.query(Locataire).get(loc_id)
                     if loc:

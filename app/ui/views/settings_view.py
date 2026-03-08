@@ -278,7 +278,6 @@ class SettingsView(BaseView):
 
     def _load_signature_status(self):
         """Load all signatures into the list widget"""
-        import os
         config = Config.get_instance()
         
         self.signatures_list.clear()
@@ -298,8 +297,6 @@ class SettingsView(BaseView):
 
     def on_import_signature(self):
         """Import a signature and add it to the list"""
-        import os
-        
         file_path, _ = QFileDialog.getOpenFileName(
             self,
             "Importer une signature",
@@ -362,8 +359,6 @@ class SettingsView(BaseView):
 
     def on_signature_selected(self):
         """Show preview of selected signature"""
-        import os
-        
         current_row = self.signatures_list.currentRow()
         if current_row < 0:
             self.btn_delete_signature.setEnabled(False)
@@ -594,7 +589,6 @@ class SettingsView(BaseView):
             else:
                 backup_text = "Sauvegardes disponibles dans 'Gestion Locative Pro Backups':\n\n"
                 for i, backup in enumerate(backups, 1):
-                    from datetime import datetime
                     created_time = backup.get('created_time', '')
                     if created_time:
                         try:

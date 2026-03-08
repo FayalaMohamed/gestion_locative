@@ -171,7 +171,7 @@ class LocataireView(BaseView):
                     ).join(
                         Bureau, contrat_bureau.c.bureau_id == Bureau.id
                     ).filter(
-                        Contrat.Locataire_id == Locataire.id
+                        Contrat.locataire_id == Locataire.id
                     ).filter(
                         Bureau.immeuble_id == immeuble_id
                     ).exists()
@@ -193,7 +193,7 @@ class LocataireView(BaseView):
                     ).join(
                         Immeuble, Bureau.immeuble_id == Immeuble.id
                     ).filter(
-                        Contrat.Locataire_id == Locataire.id
+                        Contrat.locataire_id == Locataire.id
                     ).filter(
                         Immeuble.nom.ilike(search_pattern)
                     ).exists()
@@ -258,7 +258,7 @@ class LocataireView(BaseView):
         item_id = int(self.table.item(selected[0].row(), 0).text())
         
         reply = QMessageBox.question(self, "Confirmation", 
-                                    "Êtes-vous sûr de vouloir supprimer ce locataires?",
+                                    "Êtes-vous sûr de vouloir supprimer ce locataire?",
                                     QMessageBox.Yes | QMessageBox.No)
         if reply == QMessageBox.Yes:
             try:
@@ -272,21 +272,21 @@ class LocataireView(BaseView):
                     repo = LocataireRepository(session)
                     loc = repo.get_by_id(item_id)
                     if loc:
-                        contrat_count = session.query(func.count(Contrat.id)).filter(Contrat.Locataire_id == item_id).scalar()
-                        if contrat_count > 0:
-                            QMessageBox.warning(self, "Suppression impossible", 
-                                f"Ce locataire a {contrat_count} contrat(s). Supprimez d'abord les contrats associés.")
-                            return
+                        contrat_count = session.query(func.count(Contrat.id)).filter(Contrat.locataire_id == item_id).scalar()
+                        paiement_count = session.query(func.count(Paiement.id)).filter(Paiement.locataire_id == item_id).scalar()
+                        
+                        if contrat_count > 0 or paiement_count > 0:
+                            msg = f"Ce locataire a {contrat_count} contrat(s) et {paiement_count} paiement(s) associés.\n\n"
+                            msg += "La suppression entraînera la suppression en cascade de tous les éléments associés.\n\n"
+                            msg += "Voulez-vous continuer?"
                             
-                        paiement_count = session.query(func.count(Paiement.id)).filter(Paiement.Locataire_id == item_id).scalar()
-                        if paiement_count > 0:
-                            QMessageBox.warning(self, "Suppression impossible", 
-                                f"Ce locataire a {paiement_count} paiement(s). Supprimez d'abord les paiements associés.")
-                            return
+                            confirm = QMessageBox.warning(self, "Attention - Suppression en cascade", 
+                                msg, QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+                            if confirm != QMessageBox.Yes:
+                                return
                         
                         repo.delete(loc)
                 self.load_data()
-                self.data_changed.emit()
                 self.data_changed.emit()
             except Exception as e:
                 QMessageBox.critical(self, "Erreur", f"Erreur: {str(e)}")
@@ -320,8 +320,25 @@ class LocataireView(BaseView):
                 from sqlalchemy import func
 
                 db = get_database()
-                deleted_count = 0
-                skipped_count = 0
+                
+                # Check for cascade deletions and warn user
+                total_contrats = 0
+                total_paiements = 0
+                
+                with db.session_scope() as session:
+                    for item_id in item_ids:
+                        total_contrats += session.query(func.count(Contrat.id)).filter(Contrat.locataire_id == item_id).scalar() or 0
+                        total_paiements += session.query(func.count(Paiement.id)).filter(Paiement.locataire_id == item_id).scalar() or 0
+                
+                if total_contrats > 0 or total_paiements > 0:
+                    msg = f"Les {count} locataire(s) sélectionné(s) ont {total_contrats} contrat(s) et {total_paiements} paiement(s) associés.\n\n"
+                    msg += "La suppression entraînera la suppression en cascade de tous ces éléments.\n\n"
+                    msg += "Voulez-vous continuer?"
+                    
+                    confirm = QMessageBox.warning(self, "Attention - Suppression en cascade", 
+                        msg, QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+                    if confirm != QMessageBox.Yes:
+                        return
 
                 with db.session_scope() as session:
                     repo = LocataireRepository(session)
@@ -329,25 +346,10 @@ class LocataireView(BaseView):
                     for item_id in item_ids:
                         loc = repo.get_by_id(item_id)
                         if loc:
-                            contrat_count = session.query(func.count(Contrat.id)).filter(Contrat.Locataire_id == item_id).scalar()
-                            if contrat_count > 0:
-                                skipped_count += 1
-                                continue
-
-                            paiement_count = session.query(func.count(Paiement.id)).filter(Paiement.Locataire_id == item_id).scalar()
-                            if paiement_count > 0:
-                                skipped_count += 1
-                                continue
-
                             repo.delete(loc)
-                            deleted_count += 1
 
                 self.load_data()
                 self.data_changed.emit()
-
-                if skipped_count > 0:
-                    QMessageBox.warning(self, "Suppression partielle",
-                        f"{deleted_count} locataire(s) supprimé(s), {skipped_count} non supprimé(s) car ils ont des contrats ou paiements associés.")
 
             except Exception as e:
                 QMessageBox.critical(self, "Erreur", f"Erreur: {str(e)}")
@@ -395,18 +397,19 @@ class LocataireView(BaseView):
             from app.ui.dialogs.document_browser_dialog import DocumentBrowserDialog
             
             db = get_database()
-            doc_service = DocumentService(db.get_session())
-            
-            dialog = DocumentBrowserDialog(
-                entity_type="locataire",
-                entity_id=item_id,
-                entity_name=f"Locataire: {item_name}",
-                doc_service=doc_service,
-                parent=self
-            )
-            
-            dialog.exec()
+            with db.session_scope() as session:
+                doc_service = DocumentService(session)
                 
+                dialog = DocumentBrowserDialog(
+                    entity_type="locataire",
+                    entity_id=item_id,
+                    entity_name=f"Locataire: {item_name}",
+                    doc_service=doc_service,
+                    parent=self
+                )
+                
+                dialog.exec()
+                    
         except Exception as e:
             QMessageBox.critical(self, "Erreur", f"Erreur: {str(e)}")
 
@@ -438,21 +441,27 @@ class LocataireDialog(QDialog):
         form_layout.setSpacing(15)
         
         self.nom_edit = QLineEdit()
+        self.nom_edit.setObjectName("nom_edit")
         form_layout.addRow("Nom*:", self.nom_edit)
         
         self.telephone_edit = QLineEdit()
+        self.telephone_edit.setObjectName("telephone_edit")
         form_layout.addRow("Téléphone:", self.telephone_edit)
         
         self.email_edit = QLineEdit()
+        self.email_edit.setObjectName("email_edit")
         form_layout.addRow("Email:", self.email_edit)
         
         self.cin_edit = QLineEdit()
+        self.cin_edit.setObjectName("cin_edit")
         form_layout.addRow("CIN:", self.cin_edit)
         
         self.raison_sociale_edit = QLineEdit()
+        self.raison_sociale_edit.setObjectName("raison_sociale_edit")
         form_layout.addRow("Raison Sociale:", self.raison_sociale_edit)
         
         self.notes_edit = QTextEdit()
+        self.notes_edit.setObjectName("notes_edit")
         self.notes_edit.setMaximumHeight(120)
         form_layout.addRow("Commentaires:", self.notes_edit)
         
@@ -486,54 +495,8 @@ class LocataireDialog(QDialog):
             
     def validate_and_accept(self):
         nom = self.nom_edit.text().strip()
-        
-        if not nom:
-            QMessageBox.warning(self, "Validation", "Le nom est obligatoire")
-            return
-            
-        try:
-            from app.database.connection import get_database
-            from app.models.entities import Locataire, StatutLocataire
-            from app.repositories.locataire_repository import LocataireRepository
-            
-            db = get_database()
-            with db.session_scope() as session:
-                repo = LocataireRepository(session)
-                if self.locataire_id:
-                    loc = repo.get_by_id(self.locataire_id)
-                    if loc:
-                        repo.update(loc,
-                            nom=nom,
-                            telephone=self.telephone_edit.text().strip() or None,
-                            email=self.email_edit.text().strip() or None,
-                            cin=self.cin_edit.text().strip() or None,
-                            raison_sociale=self.raison_sociale_edit.text().strip() or None,
-                            commentaires=self.notes_edit.toPlainText().strip() or None
-                        )
-                        
-                        active_contrats = session.query(Locataire).filter(
-                            Locataire.id == self.locataire_id,
-                            Locataire.statut == StatutLocataire.ACTIF
-                        ).count()
-                        loc.statut = StatutLocataire.ACTIF if active_contrats > 0 else StatutLocataire.HISTORIQUE
-                else:
-                    repo.create(
-                        nom=nom,
-                        telephone=self.telephone_edit.text().strip() or None,
-                        email=self.email_edit.text().strip() or None,
-                        cin=self.cin_edit.text().strip() or None,
-                        raison_sociale=self.raison_sociale_edit.text().strip() or None,
-                        statut=StatutLocataire.ACTIF,
-                        commentaires=self.notes_edit.toPlainText().strip() or None
-                    )
-                    
-                self.accept()
-                
-        except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Erreur: {str(e)}")
-            
-    def validate_and_accept(self):
-        nom = self.nom_edit.text().strip()
+        cin = self.cin_edit.text().strip()
+        email = self.email_edit.text().strip()
         
         if not nom:
             QMessageBox.warning(self, "Validation", "Le nom est obligatoire")
@@ -547,29 +510,54 @@ class LocataireDialog(QDialog):
             db = get_database()
             with db.session_scope() as session:
                 repo = LocataireRepository(session)
+                
+                if cin:
+                    existing_cin = session.query(Locataire).filter(
+                        Locataire.cin == cin
+                    ).first()
+                    if existing_cin and (not self.locataire_id or existing_cin.id != self.locataire_id):
+                        QMessageBox.warning(
+                            self,
+                            "Doublon détecté",
+                            f"Un locataire avec le CIN '{cin}' existe déjà."
+                        )
+                        return
+                
+                if email:
+                    existing_email = session.query(Locataire).filter(
+                        Locataire.email.ilike(email)
+                    ).first()
+                    if existing_email and (not self.locataire_id or existing_email.id != self.locataire_id):
+                        QMessageBox.warning(
+                            self,
+                            "Doublon détecté",
+                            f"Un locataire avec l'email '{email}' existe déjà."
+                        )
+                        return
+                
                 if self.locataire_id:
                     loc = repo.get_by_id(self.locataire_id)
                     if loc:
                         repo.update(loc,
                             nom=nom,
                             telephone=self.telephone_edit.text().strip() or None,
-                            email=self.email_edit.text().strip() or None,
-                            cin=self.cin_edit.text().strip() or None,
+                            email=email or None,
+                            cin=cin or None,
                             raison_sociale=self.raison_sociale_edit.text().strip() or None,
                             commentaires=self.notes_edit.toPlainText().strip() or None
                         )
                         
                         active_contrats = session.query(Contrat).filter(
-                            Contrat.Locataire_id == self.locataire_id,
-                            Contrat.est_resilie_col == False
+                            Contrat.locataire_id == self.locataire_id,
+                            Contrat.est_resilie == False
                         ).count()
                         loc.statut = StatutLocataire.ACTIF if active_contrats > 0 else StatutLocataire.HISTORIQUE
                 else:
                     repo.create(
                         nom=nom,
                         telephone=self.telephone_edit.text().strip() or None,
-                        email=self.email_edit.text().strip() or None,
-                        cin=self.cin_edit.text().strip() or None,
+                        email=email or None,
+                        cin=cin or None,
                         raison_sociale=self.raison_sociale_edit.text().strip() or None,
                         statut=StatutLocataire.ACTIF,
                         commentaires=self.notes_edit.toPlainText().strip() or None

@@ -1,7 +1,7 @@
 """Receipt PDF generation service"""
 import io
-import random
 from datetime import datetime
+from pathlib import Path
 from typing import Tuple
 
 from reportlab.lib.pagesizes import A4
@@ -11,6 +11,7 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 
 from app.utils.config import Config
 
@@ -31,9 +32,23 @@ class ReceiptService:
         return pdf_content, receipt_number
 
     def _generate_receipt_number(self) -> str:
+        """Generate a unique receipt number based on payment ID"""
+        from app.models.entities import Paiement
         year = datetime.now().year
-        sequence = str(random.randint(1, 999999)).zfill(6)
-        return f"RCU-{year}-{sequence}"
+        
+        # Get max payment ID for this year to ensure uniqueness
+        max_id = self.db.query(func.max(Paiement.id)).filter(
+            Paiement.date_paiement >= datetime(year, 1, 1).date()
+        ).scalar()
+        
+        # Use next ID (or 1 if no payments yet)
+        next_id = (max_id or 0) + 1
+        
+        # Format: RCU-YYYY-NNNNNN-TIMESTAMP
+        # Using payment ID ensures uniqueness even with concurrent payments
+        sequence = str(next_id).zfill(6)
+        timestamp_suffix = datetime.now().strftime("%H%M%S")
+        return f"RCU-{year}-{sequence}-{timestamp_suffix}"
 
     def _build_pdf(self, paiement, receipt_number: str, company_name: str = None, signature_path: str = None) -> bytes:
         buffer = io.BytesIO()
@@ -178,7 +193,6 @@ class ReceiptService:
         
         if signature_path:
             try:
-                from pathlib import Path
                 if Path(signature_path).exists():
                     signature_img = Image(signature_path, width=60*mm, height=30*mm)
                     signature_img.hAlign = 'LEFT'

@@ -56,13 +56,13 @@ def add_test_tenants():
             
             # Create contrat
             contrat = Contrat(
-                Locataire_id=locataire.id,
+                locataire_id=locataire.id,
                 date_debut=datetime(2024, 1, 1).date(),
                 montant_premier_mois=Decimal("1000.000"),
                 montant_mensuel=Decimal("1000.000"),
                 montant_caution=Decimal("2000.000"),
                 montant_pas_de_porte=Decimal("0.000"),
-                est_resilie_col=False,
+                est_resilie=False,
                 bureaux=[bureau]
             )
             session.add(contrat)
@@ -70,7 +70,7 @@ def add_test_tenants():
             
             # Create a payment
             paiement = Paiement(
-                Locataire_id=locataire.id,
+                locataire_id=locataire.id,
                 contrat_id=contrat.id,
                 type_paiement=TypePaiement.LOYER,
                 montant_total=Decimal("1050.000"),

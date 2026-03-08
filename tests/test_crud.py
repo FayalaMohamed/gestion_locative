@@ -142,11 +142,11 @@ def test_locataire_crud(immeuble_id: int):
         )
         print(f"   Cree: {Locataire}")
         
-        Locataire_id = Locataire.id
+        locataire_id = Locataire.id
         
         # Read
         print("\n2. Lecture...")
-        Locataire_read = repo.get_by_id(Locataire_id)
+        Locataire_read = repo.get_by_id(locataire_id)
         print(f"   Lu: {Locataire_read}")
         
         # Update
@@ -172,10 +172,10 @@ def test_locataire_crud(immeuble_id: int):
         
         # Change statut
         print("\n7. Desactivation du Locataire...")
-        repo.desactiver(Locataire_id)
+        repo.desactiver(locataire_id)
         print(f"   Statut: {Locataire.statut}")
         
-        return Locataire_id
+        return locataire_id
 
 
 def test_contrat_crud(locataire_id: int, bureau_ids: list):
@@ -195,7 +195,7 @@ def test_contrat_crud(locataire_id: int, bureau_ids: list):
         print("\n1. Creation d'un contrat...")
         try:
             contrat, warnings = repo.create_with_validation(
-                Locataire_id=locataire_id,
+                locataire_id=locataire_id,
                 date_debut=date(2024, 6, 1),
                 montant_mensuel=Decimal("2500.000"),
                 montant_premier_mois=Decimal("2500.000"),
@@ -222,7 +222,7 @@ def test_contrat_crud(locataire_id: int, bureau_ids: list):
         # Get actifs
         print("\n3. Contrats actifs:")
         for c in repo.get_actifs():
-            print(f"   - Contrat #{c.id} pour Locataire #{c.Locataire_id}")
+            print(f"   - Contrat #{c.id} pour Locataire #{c.locataire_id}")
         
         # Get by Locataire
         print("\n4. Contrats par Locataire:")
@@ -238,7 +238,7 @@ def test_contrat_crud(locataire_id: int, bureau_ids: list):
         # Resilier contrat
         print("\n6. Resiliation du contrat...")
         repo.resilier(contrat_id, date_resiliation=date(2024, 12, 31), motif="Fin de contrat")
-        print(f"   Resilie: {contrat.est_resilie_col}")
+        print(f"   Resilie: {contrat.est_resilie}")
         print(f"   Date resiliation: {contrat.date_resiliation}")
         
         return contrat_id
@@ -256,7 +256,7 @@ def test_paiement_crud(locataire_id: int, contrat_id: int):
         # Create caution payment
         print("\n1. Creation paiement caution...")
         paiement_caution = repo.create_paiement_autre(
-            Locataire_id=locataire_id,
+            locataire_id=locataire_id,
             contrat_id=contrat_id,
             type_paiement=TypePaiement.CAUTION,
             montant_total=Decimal("5000.000"),
@@ -270,7 +270,7 @@ def test_paiement_crud(locataire_id: int, contrat_id: int):
         mois_noms = ['Janvier','Fevrier','Mars','Avril','Mai','Juin','Juillet','Aout','Septembre','Octobre','Novembre','Decembre']
         for month in range(6, 10):
             paiement_loyer = repo.create_paiement_loyer(
-                Locataire_id=locataire_id,
+                locataire_id=locataire_id,
                 contrat_id=contrat_id,
                 montant_total=Decimal("2500.000"),
                 date_paiement=date(2024, month, 1),

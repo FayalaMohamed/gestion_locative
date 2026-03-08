@@ -78,10 +78,18 @@ class AuditService:
         return audit
 
     @staticmethod
-    def entity_to_dict(entity) -> Optional[Dict[str, Any]]:
+    def entity_to_dict(entity, _visited=None) -> Optional[Dict[str, Any]]:
         """Convert an entity to a JSON-compatible dictionary"""
         if entity is None:
             return None
+        
+        if _visited is None:
+            _visited = set()
+        
+        entity_id = (entity.__class__.__name__, getattr(entity, 'id', None))
+        if entity_id in _visited:
+            return {"id": entity_id[1], "__ref__": entity_id[0]}
+        _visited.add(entity_id)
         
         try:
             inspector = inspect(entity)
@@ -93,11 +101,11 @@ class AuditService:
                 
                 if hasattr(value, '__dict__'):
                     if isinstance(value, list):
-                        result[key] = [AuditService.entity_to_dict(item) for item in value]
+                        result[key] = [{"id": getattr(item, 'id', None)} for item in value if hasattr(item, 'id')]
                     elif hasattr(value, 'id'):
                         result[key] = {"id": value.id}
                     else:
-                        result[key] = AuditService.entity_to_dict(value)
+                        result[key] = AuditService.entity_to_dict(value, _visited)
                 elif isinstance(value, datetime):
                     result[key] = value.isoformat()
                 elif isinstance(value, date):

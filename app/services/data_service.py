@@ -2,7 +2,7 @@
 import json
 import os
 import shutil
-from datetime import datetime
+from datetime import datetime, date
 from typing import Any, Dict, List, Optional
 from pathlib import Path
 from sqlalchemy.orm import Session
@@ -140,6 +140,7 @@ class DataService:
             "numero": obj.numero,
             "etage": obj.etage,
             "surface_m2": obj.surface_m2,
+            "est_disponible": obj.est_disponible,
             "notes": obj.notes,
             "created_at": obj.created_at.isoformat() if obj.created_at else None,
             "updated_at": obj.updated_at.isoformat() if obj.updated_at else None
@@ -162,7 +163,7 @@ class DataService:
     def _serialize_contrat(self, obj: Contrat) -> Dict[str, Any]:
         return {
             "id": obj.id,
-            "locataire_id": obj.Locataire_id,
+            "locataire_id": obj.locataire_id,
             "bureau_ids": [b.id for b in obj.bureaux] if obj.bureaux else [],
             "date_debut": obj.date_debut.isoformat() if obj.date_debut else None,
             "date_derniere_augmentation": obj.date_derniere_augmentation.isoformat() if obj.date_derniere_augmentation else None,
@@ -172,7 +173,7 @@ class DataService:
             "montant_pas_de_porte": float(obj.montant_pas_de_porte) if obj.montant_pas_de_porte else None,
             "compteur_steg": obj.compteur_steg,
             "compteur_sonede": obj.compteur_sonede,
-            "est_resilie_col": obj.est_resilie_col,
+            "est_resilie": obj.est_resilie,
             "date_resiliation": obj.date_resiliation.isoformat() if obj.date_resiliation else None,
             "motif_resiliation": obj.motif_resiliation,
             "conditions": obj.conditions,
@@ -183,10 +184,13 @@ class DataService:
     def _serialize_paiement(self, obj: Paiement) -> Dict[str, Any]:
         return {
             "id": obj.id,
-            "locataire_id": obj.Locataire_id,
+            "locataire_id": obj.locataire_id,
             "contrat_id": obj.contrat_id,
             "type_paiement": obj.type_paiement.value if obj.type_paiement else None,
             "montant_total": float(obj.montant_total) if obj.montant_total else None,
+            "frais_menage": float(obj.frais_menage) if obj.frais_menage else None,
+            "frais_sonede": float(obj.frais_sonede) if obj.frais_sonede else None,
+            "frais_steg": float(obj.frais_steg) if obj.frais_steg else None,
             "date_paiement": obj.date_paiement.isoformat() if obj.date_paiement else None,
             "date_debut_periode": obj.date_debut_periode.isoformat() if obj.date_debut_periode else None,
             "date_fin_periode": obj.date_fin_periode.isoformat() if obj.date_fin_periode else None,
@@ -280,6 +284,7 @@ class DataService:
                 numero=item["numero"],
                 etage=item.get("etage"),
                 surface_m2=item.get("surface_m2"),
+                est_disponible=item.get("est_disponible", True),
                 notes=item.get("notes")
             )
             session.merge(bureau)
@@ -300,15 +305,22 @@ class DataService:
             session.merge(locataire)
 
     def _import_contrats(self, session: Session, items: List[Dict[str, Any]]):
-        from datetime import date
         for item in items:
             date_debut = date.fromisoformat(item["date_debut"]) if item.get("date_debut") else None
             date_derniere_augmentation = date.fromisoformat(item["date_derniere_augmentation"]) if item.get("date_derniere_augmentation") else None
             date_resiliation = date.fromisoformat(item["date_resiliation"]) if item.get("date_resiliation") else None
 
+            # Validate FK exists
+            locataire_id = item.get("locataire_id")
+            if locataire_id:
+                locataire = session.query(Locataire).get(locataire_id)
+                if not locataire:
+                    print(f"Warning: Locataire {locataire_id} not found for contrat {item.get('id')}")
+                    continue
+
             contrat = Contrat(
                 id=item["id"],
-                Locataire_id=item["locataire_id"],
+                locataire_id=locataire_id,
                 date_debut=date_debut,
                 date_derniere_augmentation=date_derniere_augmentation,
                 montant_premier_mois=item.get("montant_premier_mois"),
@@ -317,7 +329,7 @@ class DataService:
                 montant_pas_de_porte=item.get("montant_pas_de_porte"),
                 compteur_steg=item.get("compteur_steg"),
                 compteur_sonede=item.get("compteur_sonede"),
-                est_resilie_col=item.get("est_resilie_col", False),
+                est_resilie=item.get("est_resilie", False),
                 date_resiliation=date_resiliation,
                 motif_resiliation=item.get("motif_resiliation"),
                 conditions=item.get("conditions")
@@ -330,24 +342,46 @@ class DataService:
             if bureau_ids:
                 contrat = session.query(Contrat).get(item["id"])
                 if contrat:
-                    bureaux = session.query(Bureau).filter(Bureau.id.in_(bureau_ids)).all()
-                    contrat.bureaux = bureaux
+                    existing_bureaux = session.query(Bureau).filter(Bureau.id.in_(bureau_ids)).all()
+                    found_ids = {b.id for b in existing_bureaux}
+                    missing_ids = set(bureau_ids) - found_ids
+                    if missing_ids:
+                        print(f"Warning: Bureau IDs {missing_ids} not found for contrat {item.get('id')}")
+                    contrat.bureaux = existing_bureaux
                     session.merge(contrat)
 
     def _import_paiements(self, session: Session, items: List[Dict[str, Any]]):
-        from datetime import date
         for item in items:
             type_paiement = TypePaiement(item["type_paiement"]) if item.get("type_paiement") else TypePaiement.AUTRE
             date_paiement = date.fromisoformat(item["date_paiement"]) if item.get("date_paiement") else None
             date_debut_periode = date.fromisoformat(item["date_debut_periode"]) if item.get("date_debut_periode") else None
             date_fin_periode = date.fromisoformat(item["date_fin_periode"]) if item.get("date_fin_periode") else None
 
+            # Validate FKs exist
+            locataire_id = item.get("locataire_id")
+            contrat_id = item.get("contrat_id")
+            
+            if locataire_id:
+                locataire = session.query(Locataire).get(locataire_id)
+                if not locataire:
+                    print(f"Warning: Locataire {locataire_id} not found for paiement {item.get('id')}")
+                    continue
+            
+            if contrat_id:
+                contrat = session.query(Contrat).get(contrat_id)
+                if not contrat:
+                    print(f"Warning: Contrat {contrat_id} not found for paiement {item.get('id')}")
+                    continue
+
             paiement = Paiement(
                 id=item["id"],
-                Locataire_id=item["locataire_id"],
-                contrat_id=item["contrat_id"],
+                locataire_id=locataire_id,
+                contrat_id=contrat_id,
                 type_paiement=type_paiement,
                 montant_total=item.get("montant_total"),
+                frais_menage=item.get("frais_menage"),
+                frais_sonede=item.get("frais_sonede"),
+                frais_steg=item.get("frais_steg"),
                 date_paiement=date_paiement,
                 date_debut_periode=date_debut_periode,
                 date_fin_periode=date_fin_periode,

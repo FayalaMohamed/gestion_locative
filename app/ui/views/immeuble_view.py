@@ -6,12 +6,19 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                                QPushButton, QTableWidget, QTableWidgetItem,
                                QHeaderView, QLineEdit, QMessageBox, QGroupBox,
                                QFormLayout, QGridLayout, QSpinBox, QTextEdit,
-                               QSplitter, QFrame)
+                               QSplitter, QFrame, QDialog, QDialogButtonBox)
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont
 from typing import List
 
 from app.ui.views.base_view import BaseView, TableSelectionHelper
+from app.database.connection import get_database
+from app.models.entities import Immeuble, Bureau, Contrat, Paiement
+from app.repositories.immeuble_repository import ImmeubleRepository
+from app.services.document_service import DocumentService
+from app.ui.dialogs.tree_config_dialog import TreeConfigDialog
+from app.ui.dialogs.document_browser_dialog import DocumentBrowserDialog
+from sqlalchemy import func
 
 
 class ImmeubleView(BaseView):
@@ -108,10 +115,6 @@ class ImmeubleView(BaseView):
         
     def load_data(self):
         try:
-            from app.database.connection import get_database
-            from app.models.entities import Immeuble, Bureau
-            from sqlalchemy import func
-            
             db = get_database()
             
             with db.session_scope() as session:
@@ -168,22 +171,27 @@ class ImmeubleView(BaseView):
                                     QMessageBox.Yes | QMessageBox.No)
         if reply == QMessageBox.Yes:
             try:
-                from app.database.connection import get_database
-                from app.models.entities import Bureau
-                from app.repositories.immeuble_repository import ImmeubleRepository
-                from sqlalchemy import func
-                
                 db = get_database()
                 with db.session_scope() as session:
                     repo = ImmeubleRepository(session)
                     img = repo.get_by_id(item_id)
                     if img:
-                        bureau_count = session.query(func.count(Bureau.id)).filter(Bureau.immeuble_id == item_id).scalar()
+                        bureaux = session.query(Bureau).filter(Bureau.immeuble_id == item_id).all()
                         
-                        if bureau_count > 0:
-                            QMessageBox.warning(self, "Suppression impossible", 
-                                f"Cet immeuble contient {bureau_count} bureau(x). Supprimez d'abord les bureaux associés.")
-                            return
+                        if bureaux:
+                            msg = f"Cet immeuble contient {len(bureaux)} bureau(x).\n\n"
+                            msg += "La suppression entraînera la suppression en cascade de tous les bureaux, contrats et paiements associés.\n\n"
+                            msg += "Voulez-vous continuer?"
+                            
+                            confirm = QMessageBox.warning(self, "Attention - Suppression en cascade", 
+                                msg, QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+                            if confirm != QMessageBox.Yes:
+                                return
+                            
+                            for bureau in bureaux:
+                                for contrat in bureau.contrats:
+                                    session.query(Paiement).filter(Paiement.contrat_id == contrat.id).delete(synchronize_session=False)
+                                    session.delete(contrat)
                         
                         repo.delete(img)
                     self.load_data()
@@ -214,14 +222,24 @@ class ImmeubleView(BaseView):
 
         if reply == QMessageBox.Yes:
             try:
-                from app.database.connection import get_database
-                from app.models.entities import Bureau
-                from app.repositories.immeuble_repository import ImmeubleRepository
-                from sqlalchemy import func
-
                 db = get_database()
-                deleted_count = 0
-                skipped_count = 0
+                
+                # Check for cascade deletions and warn user
+                total_bureaux = 0
+                
+                with db.session_scope() as session:
+                    for item_id in item_ids:
+                        total_bureaux += session.query(func.count(Bureau.id)).filter(Bureau.immeuble_id == item_id).scalar() or 0
+                
+                if total_bureaux > 0:
+                    msg = f"Les {count} immeuble(s) sélectionné(s) contiennent {total_bureaux} bureau(x).\n\n"
+                    msg += "La suppression entraînera la suppression en cascade de tous les bureaux, contrats et paiements associés.\n\n"
+                    msg += "Voulez-vous continuer?"
+                    
+                    confirm = QMessageBox.warning(self, "Attention - Suppression en cascade", 
+                        msg, QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+                    if confirm != QMessageBox.Yes:
+                        return
 
                 with db.session_scope() as session:
                     repo = ImmeubleRepository(session)
@@ -229,21 +247,10 @@ class ImmeubleView(BaseView):
                     for item_id in item_ids:
                         img = repo.get_by_id(item_id)
                         if img:
-                            bureau_count = session.query(func.count(Bureau.id)).filter(Bureau.immeuble_id == item_id).scalar()
-
-                            if bureau_count > 0:
-                                skipped_count += 1
-                                continue
-
                             repo.delete(img)
-                            deleted_count += 1
 
                 self.load_data()
                 self.data_changed.emit()
-
-                if skipped_count > 0:
-                    QMessageBox.warning(self, "Suppression partielle",
-                        f"{deleted_count} immeuble(s) supprimé(s), {skipped_count} non supprimé(s) car ils contiennent des bureaux.")
 
             except Exception as e:
                 QMessageBox.critical(self, "Erreur", f"Erreur lors de la suppression: {str(e)}")
@@ -271,10 +278,6 @@ class ImmeubleView(BaseView):
         
     def on_configure_tree(self):
         try:
-            from app.database.connection import get_database
-            from app.services.document_service import DocumentService
-            from app.ui.dialogs.tree_config_dialog import TreeConfigDialog
-
             db = get_database()
             with db.session_scope() as session:
                 doc_service = DocumentService(session)
@@ -292,28 +295,22 @@ class ImmeubleView(BaseView):
             
     def show_document_browser(self, item_id, item_name):
         try:
-            from app.database.connection import get_database
-            from app.services.document_service import DocumentService
-            from app.ui.dialogs.document_browser_dialog import DocumentBrowserDialog
-            
             db = get_database()
-            doc_service = DocumentService(db.get_session())
-            
-            dialog = DocumentBrowserDialog(
-                entity_type="immeuble",
-                entity_id=item_id,
-                entity_name=f"Immeuble: {item_name}",
-                doc_service=doc_service,
-                parent=self
-            )
-            
-            dialog.exec()
+            with db.session_scope() as session:
+                doc_service = DocumentService(session)
                 
+                dialog = DocumentBrowserDialog(
+                    entity_type="immeuble",
+                    entity_id=item_id,
+                    entity_name=f"Immeuble: {item_name}",
+                    doc_service=doc_service,
+                    parent=self
+                )
+                
+                dialog.exec()
+                    
         except Exception as e:
             QMessageBox.critical(self, "Erreur", f"Erreur: {str(e)}")
-
-
-from PySide6.QtWidgets import QDialog, QDialogButtonBox
 
 
 class ImmeubleDialog(QDialog):
@@ -341,12 +338,15 @@ class ImmeubleDialog(QDialog):
         form_layout.setSpacing(15)
         
         self.nom_edit = QLineEdit()
+        self.nom_edit.setObjectName("nom_edit")
         form_layout.addRow("Nom*:", self.nom_edit)
         
         self.adresse_edit = QLineEdit()
+        self.adresse_edit.setObjectName("adresse_edit")
         form_layout.addRow("Adresse:", self.adresse_edit)
         
         self.notes_edit = QTextEdit()
+        self.notes_edit.setObjectName("notes_edit")
         self.notes_edit.setMaximumHeight(100)
         form_layout.addRow("Notes:", self.notes_edit)
         
@@ -361,9 +361,6 @@ class ImmeubleDialog(QDialog):
         
     def load_data(self):
         try:
-            from app.database.connection import get_database
-            from app.models.entities import Immeuble
-            
             db = get_database()
             with db.session_scope() as session:
                 img = session.query(Immeuble).get(self.immeuble_id)
@@ -390,6 +387,19 @@ class ImmeubleDialog(QDialog):
             db = get_database()
             with db.session_scope() as session:
                 repo = ImmeubleRepository(session)
+                
+                existing = session.query(Immeuble).filter(
+                    Immeuble.nom.ilike(nom)
+                ).first()
+                
+                if existing and (not self.immeuble_id or existing.id != self.immeuble_id):
+                    QMessageBox.warning(
+                        self, 
+                        "Doublon détecté", 
+                        f"Un immeuble avec le nom '{nom}' existe déjà.\nVeuillez choisir un autre nom."
+                    )
+                    return
+                
                 if self.immeuble_id:
                     img = repo.get_by_id(self.immeuble_id)
                     if img:

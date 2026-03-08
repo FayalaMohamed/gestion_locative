@@ -96,10 +96,10 @@ def query_contrats(db):
         
         for c in contrats:
             print(f"ID: {c.id}")
-            print(f"  Locataire ID: {c.Locataire_id}")
+            print(f"  Locataire ID: {c.locataire_id}")
             
             # Get Locataire name
-            Locataire_obj = session.query(Locataire).filter(Locataire.id == c.Locataire_id).first()
+            Locataire_obj = session.query(Locataire).filter(Locataire.id == c.locataire_id).first()
             if Locataire_obj:
                 print(f"  Locataire: {Locataire_obj.nom}")
             
@@ -111,7 +111,7 @@ def query_contrats(db):
             print(f"  Mensuel: {c.montant_mensuel} TND")
             print(f"  Caution: {c.montant_caution} TND")
             print(f"  Pas de porte: {c.montant_pas_de_porte} TND")
-            print(f"  Resilie: {'Oui' if c.est_resilie_col else 'Non'}")
+            print(f"  Resilie: {'Oui' if c.est_resilie else 'Non'}")
             print()
 
 
@@ -125,10 +125,10 @@ def query_paiements(db):
         
         for p in paiements:
             print(f"ID: {p.id}")
-            print(f"  Locataire ID: {p.Locataire_id}")
+            print(f"  Locataire ID: {p.locataire_id}")
             
             # Get Locataire name
-            Locataire_obj = session.query(Locataire).filter(Locataire.id == p.Locataire_id).first()
+            Locataire_obj = session.query(Locataire).filter(Locataire.id == p.locataire_id).first()
             if Locataire_obj:
                 print(f"  Locataire: {Locataire_obj.nom}")
             
@@ -155,7 +155,7 @@ def query_grille(db, contrat_id=1):
             return
         
         # Get Locataire
-        Locataire_obj = session.query(Locataire).filter(Locataire.id == contrat.Locataire_id).first()
+        Locataire_obj = session.query(Locataire).filter(Locataire.id == contrat.locataire_id).first()
         print(f"\nContrat #{contrat.id} - Locataire: {Locataire_obj.nom if Locataire_obj else 'N/A'}")
         print(f"Mensuel: {contrat.montant_mensuel} TND")
         

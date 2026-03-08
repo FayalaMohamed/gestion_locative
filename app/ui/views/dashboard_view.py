@@ -10,7 +10,9 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 
 from app.ui.views.base_view import BaseView
-from app.models.entities import Paiement, TypePaiement
+from app.models.entities import Paiement, TypePaiement, Immeuble, Contrat, Bureau
+from app.database.connection import get_database
+from sqlalchemy.orm import joinedload
 
 
 class DashboardView(BaseView):
@@ -59,10 +61,6 @@ class DashboardView(BaseView):
         
     def load_data(self):
         try:
-            from app.database.connection import get_database
-            from app.models.entities import Immeuble, Contrat, Bureau
-            from sqlalchemy.orm import joinedload
-            
             while self.content_layout.count():
                 item = self.content_layout.takeAt(0)
                 if item.widget():
@@ -124,9 +122,9 @@ class DashboardView(BaseView):
         for bureau in immeuble.bureaux:
             for contrat in bureau.contrats:
                 if contrat not in contrats:
-                    if statut_filter == "actif" and not contrat.est_resilie_col:
+                    if statut_filter == "actif" and not contrat.est_resilie:
                         contrats.append(contrat)
-                    elif statut_filter == "resilie" and contrat.est_resilie_col:
+                    elif statut_filter == "resilie" and contrat.est_resilie:
                         contrats.append(contrat)
                     elif statut_filter is None:
                         contrats.append(contrat)
@@ -201,7 +199,7 @@ class DashboardView(BaseView):
                 payes.update(p.get_mois_couverts())
             
             start = contrat.date_debut
-            resilie = contrat.est_resilie_col
+            resilie = contrat.est_resilie
             date_resil = contrat.date_resiliation
             
             for col, (y, m) in enumerate(headers):

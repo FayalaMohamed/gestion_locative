@@ -175,7 +175,7 @@ class PaiementView(BaseView):
                 # Apply locataire filter
                 locataire_id = self.locataire_filter.currentData()
                 if locataire_id:
-                    query = query.filter(Paiement.Locataire_id == locataire_id)
+                    query = query.filter(Paiement.locataire_id == locataire_id)
                     
                 # Apply type filter
                 type_paiement = self.type_combo.currentData()
@@ -505,18 +505,19 @@ class PaiementView(BaseView):
             from app.ui.dialogs.document_browser_dialog import DocumentBrowserDialog
             
             db = get_database()
-            doc_service = DocumentService(db.get_session())
-            
-            dialog = DocumentBrowserDialog(
-                entity_type="paiement",
-                entity_id=item_id,
-                entity_name=item_name,
-                doc_service=doc_service,
-                parent=self
-            )
-            
-            dialog.exec()
+            with db.session_scope() as session:
+                doc_service = DocumentService(session)
                 
+                dialog = DocumentBrowserDialog(
+                    entity_type="paiement",
+                    entity_id=item_id,
+                    entity_name=item_name,
+                    doc_service=doc_service,
+                    parent=self
+                )
+                
+                dialog.exec()
+                    
         except Exception as e:
             QMessageBox.critical(self, "Erreur", f"Erreur: {str(e)}")
 
@@ -548,6 +549,7 @@ class PaiementDialog(QDialog):
         form_layout.setSpacing(15)
         
         self.locataire_combo = QComboBox()
+        self.locataire_combo.setObjectName("locataire_combo")
         self.locataire_combo.setEditable(True)
         self.locataire_combo.setInsertPolicy(QComboBox.NoInsert)
         self.locataire_combo.setMinimumWidth(200)
@@ -555,16 +557,19 @@ class PaiementDialog(QDialog):
         form_layout.addRow("Locataire*:", self.locataire_combo)
         
         self.contrat_combo = QComboBox()
+        self.contrat_combo.setObjectName("contrat_combo")
         self.contrat_combo.addItem("", None)
         form_layout.addRow("Contrat*:", self.contrat_combo)
         
         self.type_combo = QComboBox()
+        self.type_combo.setObjectName("type_combo")
         from app.models.entities import TypePaiement
         for tp in TypePaiement:
             self.type_combo.addItem(tp.value, tp.name)
         form_layout.addRow("Type*:", self.type_combo)
         
         self.montant = QDoubleSpinBox()
+        self.montant.setObjectName("montant")
         self.montant.setMinimum(0)
         self.montant.setMaximum(10000000)
         self.montant.setSuffix(" TND")
@@ -576,6 +581,7 @@ class PaiementDialog(QDialog):
         frais_layout = QFormLayout()
         
         self.frais_menage = QDoubleSpinBox()
+        self.frais_menage.setObjectName("frais_menage")
         self.frais_menage.setMinimum(0)
         self.frais_menage.setMaximum(10000000)
         self.frais_menage.setSuffix(" TND")
@@ -584,6 +590,7 @@ class PaiementDialog(QDialog):
         frais_layout.addRow("Frais ménage:", self.frais_menage)
         
         self.frais_sonede = QDoubleSpinBox()
+        self.frais_sonede.setObjectName("frais_sonede")
         self.frais_sonede.setMinimum(0)
         self.frais_sonede.setMaximum(10000000)
         self.frais_sonede.setSuffix(" TND")
@@ -592,6 +599,7 @@ class PaiementDialog(QDialog):
         frais_layout.addRow("Frais SONEDE (eau):", self.frais_sonede)
         
         self.frais_steg = QDoubleSpinBox()
+        self.frais_steg.setObjectName("frais_steg")
         self.frais_steg.setMinimum(0)
         self.frais_steg.setMaximum(10000000)
         self.frais_steg.setSuffix(" TND")
@@ -603,6 +611,7 @@ class PaiementDialog(QDialog):
         form_layout.addRow(self.frais_group)
         
         self.date_paiement = QDateEdit()
+        self.date_paiement.setObjectName("date_paiement")
         self.date_paiement.setCalendarPopup(True)
         self.date_paiement.setDate(QDate.currentDate())
         form_layout.addRow("Date paiement*:", self.date_paiement)
@@ -611,6 +620,7 @@ class PaiementDialog(QDialog):
         periode_layout = QFormLayout()
         
         self.mois_debut_combo = QComboBox()
+        self.mois_debut_combo.setObjectName("mois_debut_combo")
         mois_list = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", 
                      "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"]
         for i, mois in enumerate(mois_list, 1):
@@ -620,18 +630,21 @@ class PaiementDialog(QDialog):
         periode_layout.addRow("Mois début:", self.mois_debut_combo)
         
         self.annee_debut_spin = QSpinBox()
+        self.annee_debut_spin.setObjectName("annee_debut_spin")
         self.annee_debut_spin.setMinimum(2000)
         self.annee_debut_spin.setMaximum(2100)
         self.annee_debut_spin.setValue(QDate.currentDate().year())
         periode_layout.addRow("Année début:", self.annee_debut_spin)
         
         self.mois_fin_combo = QComboBox()
+        self.mois_fin_combo.setObjectName("mois_fin_combo")
         for i, mois in enumerate(mois_list, 1):
             self.mois_fin_combo.addItem(mois, i)
         self.mois_fin_combo.setCurrentIndex(current_month - 1)
         periode_layout.addRow("Mois fin:", self.mois_fin_combo)
         
         self.annee_fin_spin = QSpinBox()
+        self.annee_fin_spin.setObjectName("annee_fin_spin")
         self.annee_fin_spin.setMinimum(2000)
         self.annee_fin_spin.setMaximum(2100)
         self.annee_fin_spin.setValue(QDate.currentDate().year())
@@ -641,6 +654,7 @@ class PaiementDialog(QDialog):
         form_layout.addRow(self.periode_group)
         
         self.commentaire_edit = QTextEdit()
+        self.commentaire_edit.setObjectName("commentaire_edit")
         self.commentaire_edit.setMaximumHeight(80)
         form_layout.addRow("Commentaire:", self.commentaire_edit)
         
@@ -706,8 +720,8 @@ class PaiementDialog(QDialog):
             db = get_database()
             with db.session_scope() as session:
                 contrats = session.query(Contrat).filter(
-                    Contrat.Locataire_id == loc_id,
-                    Contrat.est_resilie_col == False
+                    Contrat.locataire_id == loc_id,
+                    Contrat.est_resilie == False
                 ).all()
                 
                 current_data = self.contrat_combo.currentData()
@@ -734,7 +748,7 @@ class PaiementDialog(QDialog):
             with db.session_scope() as session:
                 p = session.query(Paiement).get(self.paiement_id)
                 if p:
-                    loc_id = p.Locataire_id
+                    loc_id = p.locataire_id
                     idx = self.locataire_combo.findData(loc_id)
                     if idx >= 0:
                         self.locataire_combo.setCurrentIndex(idx)
@@ -773,7 +787,8 @@ class PaiementDialog(QDialog):
             QMessageBox.critical(self, "Erreur", f"Erreur: {str(e)}")
             
     def validate_and_accept(self):
-        from app.models.entities import TypePaiement
+        from app.models.entities import TypePaiement, Contrat
+        from app.database.connection import get_database
         
         loc_id = self.locataire_combo.currentData()
         if loc_id is None:
@@ -789,6 +804,27 @@ class PaiementDialog(QDialog):
         if contrat_id is None:
             QMessageBox.warning(self, "Validation", "Le contrat est obligatoire")
             return
+        
+        try:
+            db = get_database()
+            with db.session_scope() as session:
+                contrat = session.query(Contrat).get(contrat_id)
+                if not contrat:
+                    QMessageBox.warning(self, "Validation", "Le contrat sélectionné n'existe pas")
+                    return
+                
+                if contrat.est_resilie:
+                    QMessageBox.warning(self, "Validation", 
+                        "Impossible de créer un paiement pour un contrat résilié")
+                    return
+                
+                if contrat.locataire_id != loc_id:
+                    QMessageBox.warning(self, "Validation", 
+                        "Le locataire sélectionné ne correspond pas au locataire du contrat")
+                    return
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur", f"Erreur lors de la validation: {str(e)}")
+            return
             
         type_paiement = TypePaiement[self.type_combo.currentData()]
         montant = self.montant.value()
@@ -796,9 +832,23 @@ class PaiementDialog(QDialog):
         if montant <= 0:
             QMessageBox.warning(self, "Validation", "Le montant doit être positif")
             return
+        
+        if type_paiement == TypePaiement.LOYER:
+            import calendar
+            mois_debut = self.mois_debut_combo.currentData()
+            annee_debut = self.annee_debut_spin.value()
+            mois_fin = self.mois_fin_combo.currentData()
+            annee_fin = self.annee_fin_spin.value()
+            
+            date_debut = date(annee_debut, mois_debut, 1)
+            last_day = calendar.monthrange(annee_fin, mois_fin)[1]
+            date_fin = date(annee_fin, mois_fin, last_day)
+            
+            if date_fin < date_debut:
+                QMessageBox.warning(self, "Validation", "La date de fin de période ne peut pas être antérieure à la date de début")
+                return
             
         try:
-            from app.database.connection import get_database
             from app.models.entities import Paiement
             from app.repositories.paiement_repository import PaiementRepository
             
@@ -821,7 +871,7 @@ class PaiementDialog(QDialog):
                             date_fin = date(annee_fin, mois_fin, last_day)
                         
                         repo.update(p,
-                            Locataire_id=loc_id,
+                            locataire_id=loc_id,
                             contrat_id=contrat_id,
                             type_paiement=type_paiement,
                             montant_total=montant,
@@ -847,7 +897,7 @@ class PaiementDialog(QDialog):
                         date_fin = date(annee_fin, mois_fin, last_day)
                     
                     repo.create(
-                        Locataire_id=loc_id,
+                        locataire_id=loc_id,
                         contrat_id=contrat_id,
                         type_paiement=type_paiement,
                         montant_total=montant,

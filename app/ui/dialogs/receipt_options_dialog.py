@@ -8,7 +8,7 @@ from pathlib import Path
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QComboBox, QLineEdit, QListWidget, QListWidgetItem, QMessageBox,
-    QFileDialog, QGroupBox, QFormLayout
+    QFileDialog, QGroupBox, QFormLayout, QInputDialog
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QPixmap, QIcon
@@ -218,7 +218,6 @@ class ReceiptOptionsDialog(QDialog):
     
     def _show_input_dialog(self, title, label, default_text=""):
         """Show a simple input dialog"""
-        from PySide6.QtWidgets import QInputDialog
         return QInputDialog.getText(self, title, label, text=default_text)
     
     def on_delete_signature(self):

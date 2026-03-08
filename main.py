@@ -9,6 +9,7 @@ import subprocess
 import tempfile
 import ssl
 import json
+import threading
 import urllib.request
 import urllib.error
 from pathlib import Path
@@ -71,8 +72,20 @@ def run_database_migrations():
         command.upgrade(alembic_cfg, "head")
         print("Database migrations completed successfully")
     except Exception as e:
-        print(f"Migration warning: {e}")
-        # Don't crash the app if migration fails
+        import traceback
+        print(f"Migration error: {e}")
+        traceback.print_exc()
+        from PySide6.QtWidgets import QMessageBox, QApplication
+        app = QApplication.instance()
+        if app:
+            QMessageBox.critical(
+                None, 
+                "Erreur de migration",
+                f"La migration de la base de données a échoué:\n{str(e)}\n\n"
+                "L'application va se fermer. Veuillez contacter le support."
+            )
+        import sys
+        sys.exit(1)
 
 
 class UpdateNotification(QWidget):
@@ -500,7 +513,6 @@ del "%~f0"'''
                 print(f"Silent update check failed: {e}")
         
         # Run check in background using QTimer to avoid blocking
-        import threading
         thread = threading.Thread(target=check_update_worker, daemon=True)
         thread.start()
     

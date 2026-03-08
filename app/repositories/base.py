@@ -1,4 +1,5 @@
 """Base repository class with common CRUD operations"""
+import logging
 from typing import TypeVar, Generic, Optional, List, Type
 from sqlalchemy.orm import Session
 
@@ -48,6 +49,8 @@ class BaseRepository(Generic[T]):
     def delete(self, entity: T) -> bool:
         """Delete an entity"""
         from app.services.audit_service import AuditService
+        logger = logging.getLogger(__name__)
+        
         try:
             before_state = AuditService.entity_to_dict(entity)
             entity_id = entity.id
@@ -55,9 +58,10 @@ class BaseRepository(Generic[T]):
             self.session.flush()
             AuditService.log_delete(self.session, self.model_class, entity_id, before_state)
             return True
-        except Exception:
+        except Exception as e:
             self.session.rollback()
-            return False
+            logger.error(f"Failed to delete {self.model_class.__name__} (id={entity.id if entity else 'None'}): {e}", exc_info=True)
+            raise
     
     def delete_by_id(self, id: int) -> bool:
         """Delete an entity by its ID"""

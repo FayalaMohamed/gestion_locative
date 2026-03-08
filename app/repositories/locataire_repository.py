@@ -2,7 +2,8 @@
 from typing import Optional, List
 from sqlalchemy.orm import Session
 
-from app.models.entities import Locataire, StatutLocataire
+from app.models.entities import Locataire, StatutLocataire, Contrat, Bureau
+from app.models.entities import contrat_bureau
 from app.repositories.base import BaseRepository
 
 
@@ -27,15 +28,30 @@ class LocataireRepository(BaseRepository[Locataire]):
         return self.filter_by(statut=StatutLocataire.HISTORIQUE)
     
     def get_by_immeuble(self, immeuble_id: int) -> List[Locataire]:
-        """Get locataires in an immeuble"""
-        return self.filter_by(immeuble_id=immeuble_id)
+        """Get locataires who have contracts with offices in an immeuble"""
+        return self.session.query(Locataire).join(
+            Contrat, Locataire.id == Contrat.locataire_id
+        ).join(
+            contrat_bureau, Contrat.id == contrat_bureau.c.contrat_id
+        ).join(
+            Bureau, contrat_bureau.c.bureau_id == Bureau.id
+        ).filter(
+            Bureau.immeuble_id == immeuble_id
+        ).distinct().all()
     
     def get_actifs_by_immeuble(self, immeuble_id: int) -> List[Locataire]:
-        """Get active locataires in an immeuble"""
-        return self.session.query(Locataire).filter(
-            Locataire.immeuble_id == immeuble_id,
+        """Get active locataires who have active contracts with offices in an immeuble"""
+        return self.session.query(Locataire).join(
+            Contrat, Locataire.id == Contrat.locataire_id
+        ).join(
+            contrat_bureau, Contrat.id == contrat_bureau.c.contrat_id
+        ).join(
+            Bureau, contrat_bureau.c.bureau_id == Bureau.id
+        ).filter(
+            Bureau.immeuble_id == immeuble_id,
+            Contrat.est_resilie == False,
             Locataire.statut == StatutLocataire.ACTIF
-        ).all()
+        ).distinct().all()
     
     def search(self, query: str) -> List[Locataire]:
         """Search locataires by name, email, phone, CIN or raison_sociale"""
@@ -56,18 +72,18 @@ class LocataireRepository(BaseRepository[Locataire]):
         """Find locataire by email"""
         return self.first(email=email)
     
-    def change_statut(self, Locataire_id: int, nouveau_statut: StatutLocataire) -> Optional[Locataire]:
+    def change_statut(self, locataire_id: int, nouveau_statut: StatutLocataire) -> Optional[Locataire]:
         """Change Locataire status"""
-        Locataire = self.get_by_id(Locataire_id)
-        if Locataire:
-            Locataire.statut = nouveau_statut
+        locataire = self.get_by_id(locataire_id)
+        if locataire:
+            locataire.statut = nouveau_statut
             self.session.flush()
-        return Locataire
+        return locataire
     
-    def desactiver(self, Locataire_id: int) -> Optional[Locataire]:
+    def desactiver(self, locataire_id: int) -> Optional[Locataire]:
         """Deactivate a Locataire (move to historique)"""
-        return self.change_statut(Locataire_id, StatutLocataire.HISTORIQUE)
+        return self.change_statut(locataire_id, StatutLocataire.HISTORIQUE)
     
-    def reactiver(self, Locataire_id: int) -> Optional[Locataire]:
+    def reactiver(self, locataire_id: int) -> Optional[Locataire]:
         """Reactivate a Locataire"""
-        return self.change_statut(Locataire_id, StatutLocataire.ACTIF)
+        return self.change_statut(locataire_id, StatutLocataire.ACTIF)

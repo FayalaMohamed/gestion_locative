@@ -9,9 +9,15 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                                QTextEdit, QDialog, QDialogButtonBox, QGridLayout)
 from PySide6.QtCore import Qt
 from sqlalchemy import func
-from app.models.entities import contrat_bureau
+from app.models.entities import contrat_bureau, Bureau, Immeuble, Contrat
 from app.ui.views.base_view import TableSelectionHelper
+from app.database.connection import get_database
+from app.repositories.bureau_repository import BureauRepository
+from app.services.document_service import DocumentService
+from app.ui.dialogs.tree_config_dialog import TreeConfigDialog
+from app.ui.dialogs.document_browser_dialog import DocumentBrowserDialog
 from typing import List
+from sqlalchemy.orm import joinedload
 
 
 class BureauView(QWidget):
@@ -116,10 +122,6 @@ class BureauView(QWidget):
         
     def load_data(self):
         try:
-            from app.database.connection import get_database
-            from app.models.entities import Bureau, Immeuble, Contrat
-            from sqlalchemy.orm import joinedload
-            
             db = get_database()
             
             with db.session_scope() as session:
@@ -132,9 +134,9 @@ class BureauView(QWidget):
                 disponible = self.disponible_combo.currentData()
                 if disponible is not None:
                     if disponible:
-                        query = query.filter(~Bureau.contrats.any(Contrat.est_resilie_col == False))
+                        query = query.filter(~Bureau.contrats.any(Contrat.est_resilie == False))
                     else:
-                        query = query.filter(Bureau.contrats.any(Contrat.est_resilie_col == False))
+                        query = query.filter(Bureau.contrats.any(Contrat.est_resilie == False))
                     
                 bureaux = query.order_by(Bureau.numero).all()
                 
@@ -148,7 +150,7 @@ class BureauView(QWidget):
                     self.table.setItem(row, 3, QTableWidgetItem(bur.etage or ""))
                     self.table.setItem(row, 4, QTableWidgetItem(f"{bur.surface_m2} m²" if bur.surface_m2 else ""))
                     
-                    est_disponible = not any(c.est_resilie_col == False for c in bur.contrats)
+                    est_disponible = not any(c.est_resilie == False for c in bur.contrats)
                     self.table.setItem(row, 5, QTableWidgetItem("Oui" if est_disponible else "Non"))
                     self.table.setItem(row, 6, QTableWidgetItem(bur.notes or ""))
                     
@@ -172,9 +174,6 @@ class BureauView(QWidget):
             
     def load_immeubles(self):
         try:
-            from app.database.connection import get_database
-            from app.models.entities import Immeuble
-            
             db = get_database()
             with db.session_scope() as session:
                 immeubles = session.query(Immeuble).all()
@@ -210,9 +209,6 @@ class BureauView(QWidget):
         reply = QMessageBox.question(self, "Confirmation", "Supprimer?", QMessageBox.Yes | QMessageBox.No)
         if reply == QMessageBox.Yes:
             try:
-                from app.database.connection import get_database
-                from app.models.entities import Bureau, Contrat
-                from app.repositories.bureau_repository import BureauRepository
                 db = get_database()
                 with db.session_scope() as session:
                     repo = BureauRepository(session)
@@ -220,9 +216,15 @@ class BureauView(QWidget):
                     if bur:
                         contrat_count = session.query(func.count(Contrat.id)).join(contrat_bureau).filter(contrat_bureau.c.bureau_id == item_id).scalar()
                         if contrat_count > 0:
-                            QMessageBox.warning(self, "Suppression impossible", 
-                                "Ce bureau est lié à un ou plusieurs contrats. Résiliez d'abord les contrats associés.")
-                            return
+                            msg = f"Ce bureau est lié à {contrat_count} contrat(s).\n\n"
+                            msg += "La suppression entraînera la suppression des associations avec ces contrats.\n\n"
+                            msg += "Voulez-vous continuer?"
+                            
+                            confirm = QMessageBox.warning(self, "Attention - Suppression en cascade", 
+                                msg, QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+                            if confirm != QMessageBox.Yes:
+                                return
+                        
                         repo.delete(bur)
                 self.load_immeubles()
                 self.load_data()
@@ -251,13 +253,24 @@ class BureauView(QWidget):
 
         if reply == QMessageBox.Yes:
             try:
-                from app.database.connection import get_database
-                from app.models.entities import Contrat
-                from app.repositories.bureau_repository import BureauRepository
-
                 db = get_database()
-                deleted_count = 0
-                skipped_count = 0
+                
+                # Check for cascade deletions and warn user
+                total_contrats = 0
+                
+                with db.session_scope() as session:
+                    for item_id in item_ids:
+                        total_contrats += session.query(func.count(Contrat.id)).join(contrat_bureau).filter(contrat_bureau.c.bureau_id == item_id).scalar() or 0
+                
+                if total_contrats > 0:
+                    msg = f"Les {count} bureau(x) sélectionné(s) sont liés à {total_contrats} contrat(s).\n\n"
+                    msg += "La suppression entraînera la suppression des associations avec ces contrats.\n\n"
+                    msg += "Voulez-vous continuer?"
+                    
+                    confirm = QMessageBox.warning(self, "Attention - Suppression en cascade", 
+                        msg, QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+                    if confirm != QMessageBox.Yes:
+                        return
 
                 with db.session_scope() as session:
                     repo = BureauRepository(session)
@@ -265,31 +278,16 @@ class BureauView(QWidget):
                     for item_id in item_ids:
                         bur = repo.get_by_id(item_id)
                         if bur:
-                            contrat_count = session.query(func.count(Contrat.id)).join(contrat_bureau).filter(contrat_bureau.c.bureau_id == item_id).scalar()
-
-                            if contrat_count > 0:
-                                skipped_count += 1
-                                continue
-
                             repo.delete(bur)
-                            deleted_count += 1
 
                 self.load_immeubles()
                 self.load_data()
-
-                if skipped_count > 0:
-                    QMessageBox.warning(self, "Suppression partielle",
-                        f"{deleted_count} bureau(s) supprimé(s), {skipped_count} non supprimé(s) car ils sont liés à des contrats.")
 
             except Exception as e:
                 QMessageBox.critical(self, "Erreur", f"Erreur lors de la suppression: {str(e)}")
 
     def on_configure_tree(self):
         try:
-            from app.database.connection import get_database
-            from app.services.document_service import DocumentService
-            from app.ui.dialogs.tree_config_dialog import TreeConfigDialog
-
             db = get_database()
             with db.session_scope() as session:
                 doc_service = DocumentService(session)
@@ -318,23 +316,20 @@ class BureauView(QWidget):
         
     def show_document_browser(self, item_id, item_name):
         try:
-            from app.database.connection import get_database
-            from app.services.document_service import DocumentService
-            from app.ui.dialogs.document_browser_dialog import DocumentBrowserDialog
-            
             db = get_database()
-            doc_service = DocumentService(db.get_session())
-            
-            dialog = DocumentBrowserDialog(
-                entity_type="bureau",
-                entity_id=item_id,
-                entity_name=item_name,
-                doc_service=doc_service,
-                parent=self
-            )
-            
-            dialog.exec()
+            with db.session_scope() as session:
+                doc_service = DocumentService(session)
                 
+                dialog = DocumentBrowserDialog(
+                    entity_type="bureau",
+                    entity_id=item_id,
+                    entity_name=item_name,
+                    doc_service=doc_service,
+                    parent=self
+                )
+                
+                dialog.exec()
+                    
         except Exception as e:
             QMessageBox.critical(self, "Erreur", f"Erreur: {str(e)}")
 
@@ -357,16 +352,20 @@ class BureauDialog(QDialog):
         form.setSpacing(15)
         
         self.immeuble_combo = QComboBox()
+        self.immeuble_combo.setObjectName("immeuble_combo")
         form.addRow("Immeuble*:", self.immeuble_combo)
         
         self.numero_edit = QLineEdit()
+        self.numero_edit.setObjectName("numero_edit")
         self.numero_edit.setPlaceholderText("Ex: B2.1, 101, A-5")
         form.addRow("Numéro*:", self.numero_edit)
         
         self.etage_edit = QLineEdit()
+        self.etage_edit.setObjectName("etage_edit")
         form.addRow("Étage:", self.etage_edit)
         
         self.surface_spin = QDoubleSpinBox()
+        self.surface_spin.setObjectName("surface_spin")
         self.surface_spin.setMinimum(0)
         self.surface_spin.setMaximum(10000)
         self.surface_spin.setSuffix(" m²")
@@ -374,6 +373,7 @@ class BureauDialog(QDialog):
         form.addRow("Surface:", self.surface_spin)
         
         self.notes_edit = QTextEdit()
+        self.notes_edit.setObjectName("notes_edit")
         self.notes_edit.setMaximumHeight(80)
         form.addRow("Notes:", self.notes_edit)
         
@@ -401,8 +401,6 @@ class BureauDialog(QDialog):
             
     def load_data(self):
         try:
-            from app.database.connection import get_database
-            from app.models.entities import Bureau
             db = get_database()
             with db.session_scope() as session:
                 bur = session.query(Bureau).get(self.bureau_id)
@@ -428,17 +426,26 @@ class BureauDialog(QDialog):
             return
         
         try:
-            from app.database.connection import get_database
-            from app.models.entities import Bureau
-            from app.repositories.bureau_repository import BureauRepository
             db = get_database()
             with db.session_scope() as session:
+                immeuble_id = self.immeuble_combo.currentData()
+                
+                existing_bureau = session.query(Bureau).filter(
+                    Bureau.immeuble_id == immeuble_id,
+                    Bureau.numero == numero_text
+                ).first()
+                
+                if existing_bureau and (not self.bureau_id or existing_bureau.id != self.bureau_id):
+                    QMessageBox.warning(self, "Validation", 
+                        f"Un bureau avec le numéro '{numero_text}' existe déjà dans cet immeuble")
+                    return
+                
                 repo = BureauRepository(session)
                 if self.bureau_id:
                     bur = repo.get_by_id(self.bureau_id)
                     if bur:
                         repo.update(bur,
-                            immeuble_id=self.immeuble_combo.currentData(),
+                            immeuble_id=immeuble_id,
                             numero=numero_text,
                             etage=self.etage_edit.text().strip() or None,
                             surface_m2=self.surface_spin.value(),
@@ -446,7 +453,7 @@ class BureauDialog(QDialog):
                         )
                 else:
                     repo.create(
-                        immeuble_id=self.immeuble_combo.currentData(),
+                        immeuble_id=immeuble_id,
                         numero=numero_text,
                         etage=self.etage_edit.text().strip() or None,
                         surface_m2=self.surface_spin.value(),

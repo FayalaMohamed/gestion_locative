@@ -3,7 +3,7 @@ from decimal import Decimal
 from enum import Enum as PyEnum
 from sqlalchemy import (
     Column, Integer, String, Float, DateTime, Date, Text, 
-    ForeignKey, Enum, Numeric, Boolean, UniqueConstraint, Table
+    ForeignKey, Enum, Numeric, Boolean, UniqueConstraint, Table, Index
 )
 from sqlalchemy.orm import relationship, DeclarativeBase
 from sqlalchemy.dialects.sqlite import JSON
@@ -17,8 +17,8 @@ class Base(DeclarativeBase):
 contrat_bureau = Table(
     'contrat_bureau',
     Base.metadata,
-    Column('contrat_id', Integer, ForeignKey('contrats.id'), primary_key=True),
-    Column('bureau_id', Integer, ForeignKey('bureaux.id'), primary_key=True)
+    Column('contrat_id', Integer, ForeignKey('contrats.id', ondelete="CASCADE"), primary_key=True),
+    Column('bureau_id', Integer, ForeignKey('bureaux.id', ondelete="CASCADE"), primary_key=True)
 )
 
 
@@ -55,7 +55,7 @@ class Bureau(Base):
     __tablename__ = "bureaux"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    immeuble_id = Column(Integer, ForeignKey("immeubles.id"), nullable=False)
+    immeuble_id = Column(Integer, ForeignKey("immeubles.id", ondelete="CASCADE"), nullable=False)
     numero = Column(String(50), nullable=False)
     etage = Column(String(50), nullable=True)
     surface_m2 = Column(Float, nullable=True)
@@ -70,6 +70,8 @@ class Bureau(Base):
 
     __table_args__ = (
         UniqueConstraint('immeuble_id', 'numero', name='uq_immeuble_bureau_numero'),
+        Index('idx_bureau_immeuble_id', 'immeuble_id'),
+        Index('idx_bureau_disponible', 'est_disponible'),
     )
 
     def __repr__(self):
@@ -97,9 +99,16 @@ class Locataire(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    # Relations
-    contrats = relationship("Contrat", back_populates="locataire")
-    paiements = relationship("Paiement", back_populates="locataire")
+    # Relations - cascade delete to prevent orphaned records
+    contrats = relationship("Contrat", back_populates="locataire", cascade="all, delete-orphan")
+    paiements = relationship("Paiement", back_populates="locataire", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        Index('idx_locataire_nom', 'nom'),
+        Index('idx_locataire_statut', 'statut'),
+        Index('idx_locataire_cin', 'cin'),
+        Index('idx_locataire_email', 'email'),
+    )
 
     def __repr__(self):
         return f"<Locataire(id={self.id}, nom='{self.nom}', statut={self.statut})>"
@@ -110,7 +119,7 @@ class Contrat(Base):
     __tablename__ = "contrats"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    Locataire_id = Column(Integer, ForeignKey("locataires.id"), nullable=False)
+    locataire_id = Column(Integer, ForeignKey("locataires.id", ondelete="CASCADE"), nullable=False)
     
     # Many-to-many relationship with Bureau
     bureaux = relationship("Bureau", secondary=contrat_bureau, back_populates="contrats")
@@ -130,7 +139,7 @@ class Contrat(Base):
     compteur_sonede = Column(String(100), nullable=True)
     
     # Statut du contrat
-    est_resilie_col = Column(Boolean, default=False)
+    est_resilie = Column(Boolean, default=False)
     date_resiliation = Column(Date, nullable=True)
     motif_resiliation = Column(Text, nullable=True)
     
@@ -141,16 +150,21 @@ class Contrat(Base):
 
     # Relations
     locataire = relationship("Locataire", back_populates="contrats")
-    paiements = relationship("Paiement", back_populates="contrat")
+    paiements = relationship("Paiement", back_populates="contrat", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        Index('idx_contrat_locataire_id', 'locataire_id'),
+        Index('idx_contrat_est_resilie', 'est_resilie'),
+        Index('idx_contrat_date_debut', 'date_debut'),
+    )
 
     def __repr__(self):
-        return f"<Contrat(id={self.id}, Locataire_id={self.Locataire_id}, bureaux={len(self.bureaux)})>"
+        return f"<Contrat(id={self.id}, locataire_id={self.locataire_id}, bureaux={len(self.bureaux)})>"
 
     @property
     def est_actif(self) -> bool:
         """Retourne True si le contrat est actuellement en cours"""
-        est_resilie_val = getattr(self, 'est_resilie_col', None)
-        if est_resilie_val is True:
+        if self.est_resilie:
             return False
         return True
     
@@ -164,8 +178,8 @@ class Paiement(Base):
     __tablename__ = "paiements"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    Locataire_id = Column(Integer, ForeignKey("locataires.id"), nullable=False)
-    contrat_id = Column(Integer, ForeignKey("contrats.id"), nullable=False)
+    locataire_id = Column(Integer, ForeignKey("locataires.id", ondelete="CASCADE"), nullable=False)
+    contrat_id = Column(Integer, ForeignKey("contrats.id", ondelete="CASCADE"), nullable=False)
     
     # Type et montant
     type_paiement = Column(Enum(TypePaiement), nullable=False)
@@ -190,8 +204,21 @@ class Paiement(Base):
     locataire = relationship("Locataire", back_populates="paiements")
     contrat = relationship("Contrat", back_populates="paiements")
 
+    __table_args__ = (
+        Index('idx_paiement_contrat_id', 'contrat_id'),
+        Index('idx_paiement_locataire_id', 'locataire_id'),
+        Index('idx_paiement_type', 'type_paiement'),
+        Index('idx_paiement_date', 'date_paiement'),
+    )
+
     def __repr__(self):
         return f"<Paiement(id={self.id}, type={self.type_paiement}, montant={self.montant_total})>"
+    
+    @property
+    def montant_base(self) -> Decimal:
+        """Montant base sans les frais"""
+        base = self.montant_total - (self.frais_menage or Decimal("0")) - (self.frais_sonede or Decimal("0")) - (self.frais_steg or Decimal("0"))
+        return max(Decimal("0"), base)
 
     def get_mois_couverts(self) -> list:
         type_paiement_val = getattr(self, 'type_paiement', None)
@@ -268,6 +295,10 @@ class Document(Base):
     description = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        Index('idx_document_entity', 'entity_type', 'entity_id'),
+    )
 
     def __repr__(self):
         return f"<Document(id={self.id}, entity_type='{self.entity_type}', entity_id={self.entity_id}, filename='{self.filename}')>"

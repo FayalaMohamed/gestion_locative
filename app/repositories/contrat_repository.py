@@ -2,9 +2,8 @@
 from typing import Optional, List, Tuple
 from datetime import date
 from sqlalchemy.orm import Session
-from sqlalchemy.exc import IntegrityError
 
-from app.models.entities import Contrat
+from app.models.entities import Contrat, contrat_bureau, Bureau, Locataire, StatutLocataire
 from app.repositories.base import BaseRepository
 
 
@@ -24,29 +23,28 @@ class ContratRepository(BaseRepository[Contrat]):
     def get_actifs(self) -> List[Contrat]:
         """Get all active contrats"""
         return self.session.query(Contrat).filter(
-            Contrat.est_resilie_col == False
+            Contrat.est_resilie == False
         ).all()
     
     def get_resilies(self) -> List[Contrat]:
         """Get all terminated contrats"""
         return self.session.query(Contrat).filter(
-            Contrat.est_resilie_col == True
+            Contrat.est_resilie == True
         ).all()
     
-    def get_by_locataire(self, Locataire_id: int) -> List[Contrat]:
+    def get_by_locataire(self, locataire_id: int) -> List[Contrat]:
         """Get all contrats for a Locataire"""
-        return self.filter_by(Locataire_id=Locataire_id)
+        return self.filter_by(locataire_id=locataire_id)
     
-    def get_actifs_by_locataire(self, Locataire_id: int) -> List[Contrat]:
+    def get_actifs_by_locataire(self, locataire_id: int) -> List[Contrat]:
         """Get active contrats for a Locataire"""
         return self.session.query(Contrat).filter(
-            Contrat.Locataire_id == Locataire_id,
-            Contrat.est_resilie_col == False
+            Contrat.locataire_id == locataire_id,
+            Contrat.est_resilie == False
         ).all()
     
     def get_by_bureau(self, bureau_id: int) -> List[Contrat]:
         """Get contrats that include a specific bureau"""
-        from app.models.entities import contrat_bureau
         return self.session.query(Contrat).join(
             contrat_bureau
         ).filter(
@@ -55,15 +53,14 @@ class ContratRepository(BaseRepository[Contrat]):
     
     def get_contrat_actif_for_bureau(self, bureau_id: int) -> Optional[Contrat]:
         """Get the active contrat for a bureau (if any)"""
-        from app.models.entities import contrat_bureau
         return self.session.query(Contrat).join(
             contrat_bureau
         ).filter(
             contrat_bureau.c.bureau_id == bureau_id,
-            Contrat.est_resilie_col == False
+            Contrat.est_resilie == False
         ).first()
     
-    def create_with_validation(self, Locataire_id: int, date_debut: date, 
+    def create_with_validation(self, locataire_id: int, date_debut: date, 
                                 montant_mensuel: float, bureaux: list = None,
                                 **kwargs) -> Tuple[Contrat, List[str]]:
         """
@@ -77,32 +74,19 @@ class ContratRepository(BaseRepository[Contrat]):
         """
         warnings = []
         
-        # Validate date_debut is not in the future
         if date_debut > date.today():
             warnings.append(f"La date de début ({date_debut}) est dans le futur")
         
-        # Check for overlapping contrats with same Locataire
-        active_contrats = self.get_actifs_by_locataire(Locataire_id)
+        active_contrats = self.get_actifs_by_locataire(locataire_id)
         if active_contrats:
-            # Check date overlap
-            for contrat in active_contrats:
-                if contrat.date_fin is None or contrat.date_fin >= date_debut:
-                    raise ContratValidationError(
-                        f"Le locataire a déjà un contrat actif #{contrat.id} "
-                        f"du {contrat.date_debut} sans date de fin définie"
-                    )
-                if contrat.date_fin >= date_debut:
-                    raise ContratValidationError(
-                        f"Le locataire a un contrat actif #{contrat.id} "
-                        f"jusqu'au {contrat.date_fin}"
-                    )
+            raise ContratValidationError(
+                f"Le locataire a déjà un contrat actif #{active_contrats[0].id} "
+                f"commencé le {active_contrats[0].date_debut}"
+            )
         
-        # Validate bureaux
         if bureaux is None:
             bureaux = []
         
-        # Check if bureaux are available
-        from app.models.entities import Bureau
         unavailable_bureaux = []
         for bureau in bureaux:
             existing = self.get_contrat_actif_for_bureau(bureau.id)
@@ -115,51 +99,88 @@ class ContratRepository(BaseRepository[Contrat]):
                 f"Les bureaux suivants sont déjà occupés: {msg}"
             )
         
-        # Create the contrat
         contrat = Contrat(
-            Locataire_id=Locataire_id,
+            locataire_id=locataire_id,
             date_debut=date_debut,
             montant_mensuel=montant_mensuel,
             **kwargs
         )
         
-        # Add bureaux
         if bureaux:
             contrat.bureaux = bureaux
+            for bureau in bureaux:
+                bureau.est_disponible = False
         
         self.session.add(contrat)
         self.session.flush()
         
         return contrat, warnings
     
-    def resilier(self, contrat_id: int, date_resiliation: date, 
+    def resilier(self, contrat_id: int, date_resiliation: date,
                  motif: str = None) -> Optional[Contrat]:
         """Terminate a contrat"""
         contrat = self.get_by_id(contrat_id)
         if contrat:
-            contrat.est_resilie_col = True
+            contrat.est_resilie = True
             contrat.date_resiliation = date_resiliation
             contrat.motif_resiliation = motif
+            loc_id = contrat.locataire_id
+            
+            for bureau in contrat.bureaux:
+                other_active = self.session.query(Contrat).join(
+                    contrat_bureau, Contrat.id == contrat_bureau.c.contrat_id
+                ).filter(
+                    contrat_bureau.c.bureau_id == bureau.id,
+                    Contrat.id != contrat_id,
+                    Contrat.est_resilie == False
+                ).first()
+                
+                if not other_active:
+                    bureau.est_disponible = True
+            
             self.session.flush()
+            
+            active_count = self.session.query(Contrat).filter(
+                Contrat.locataire_id == loc_id,
+                Contrat.est_resilie == False
+            ).count()
+            
+            if active_count == 0:
+                locataire = self.session.query(Locataire).get(loc_id)
+                if locataire:
+                    locataire.statut = StatutLocataire.HISTORIQUE
+                    self.session.flush()
+                    
         return contrat
     
     def reactiver(self, contrat_id: int, nouvelle_date_debut: date = None) -> Optional[Contrat]:
         """Reactivate a terminated contrat"""
         contrat = self.get_by_id(contrat_id)
         if contrat:
-            contrat.est_resilie_col = False
+            contrat.est_resilie = False
             contrat.date_resiliation = None
             contrat.motif_resiliation = None
             if nouvelle_date_debut:
                 contrat.date_debut = nouvelle_date_debut
+            
+            loc_id = contrat.locataire_id
+            
+            for bureau in contrat.bureaux:
+                bureau.est_disponible = False
+            
             self.session.flush()
+            
+            locataire = self.session.query(Locataire).get(loc_id)
+            if locataire:
+                locataire.statut = StatutLocataire.ACTIF
+                self.session.flush()
+                
         return contrat
     
     def ajouter_bureau(self, contrat_id: int, bureau) -> Optional[Contrat]:
         """Add a bureau to an existing contrat"""
         contrat = self.get_by_id(contrat_id)
         if contrat:
-            # Check if bureau is available
             existing = self.get_contrat_actif_for_bureau(bureau.id)
             if existing and existing.id != contrat_id:
                 raise ContratValidationError(
@@ -168,6 +189,7 @@ class ContratRepository(BaseRepository[Contrat]):
             
             if bureau not in contrat.bureaux:
                 contrat.bureaux.append(bureau)
+                bureau.est_disponible = False
                 self.session.flush()
         return contrat
     
@@ -176,6 +198,18 @@ class ContratRepository(BaseRepository[Contrat]):
         contrat = self.get_by_id(contrat_id)
         if contrat and bureau in contrat.bureaux:
             contrat.bureaux.remove(bureau)
+            
+            other_active = self.session.query(Contrat).join(
+                Contrat.bureaux
+            ).filter(
+                Bureau.id == bureau.id,
+                Contrat.id != contrat_id,
+                Contrat.est_resilie == False
+            ).first()
+            
+            if not other_active:
+                bureau.est_disponible = True
+            
             self.session.flush()
         return contrat
     
@@ -186,13 +220,13 @@ class ContratRepository(BaseRepository[Contrat]):
         
         return self.session.query(Contrat).filter(
             Contrat.date_debut <= end_of_year,
-            (Contrat.date_fin.is_(None)) | (Contrat.date_fin >= start_of_year)
+            (Contrat.est_resilie == False) | 
+            ((Contrat.est_resilie == True) & (Contrat.date_resiliation >= start_of_year))
         ).all()
     
     def search(self, query: str) -> List[Contrat]:
         """Search contrats by Locataire name or bureau numero"""
         search_term = f"%{query}%"
-        from app.models.entities import Locataire
         return self.session.query(Contrat).join(Locataire).filter(
             (Locataire.nom.ilike(search_term)) |
             (Locataire.raison_sociale.ilike(search_term))

@@ -1,4 +1,5 @@
 from typing import List, Optional, Dict, Any
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from app.models.entities import Document, DocumentTreeConfig
@@ -92,7 +93,6 @@ class DocumentRepository:
     def create_tree_config(self, entity_type: str, tree_structure: Dict[str, Any]) -> DocumentTreeConfig:
         existing = self.get_tree_config(entity_type)
         if existing:
-            from sqlalchemy import update
             self.session.execute(
                 update(DocumentTreeConfig)
                 .where(DocumentTreeConfig.entity_type == entity_type)

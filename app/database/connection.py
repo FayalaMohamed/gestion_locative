@@ -1,5 +1,6 @@
 """Database connection and session management module"""
 import os
+import threading
 from pathlib import Path
 from contextlib import contextmanager
 from typing import Generator, Optional
@@ -16,12 +17,15 @@ class Database:
     """Database manager for handling SQLAlchemy connection"""
     
     _instance: Optional['Database'] = None
+    _lock = threading.Lock()
     _engine: Optional[Engine] = None
     _session_factory: Optional[sessionmaker] = None
     
     def __new__(cls) -> 'Database':
         if cls._instance is None:
-            cls._instance = super().__new__(cls)
+            with cls._lock:
+                if cls._instance is None:
+                    cls._instance = super().__new__(cls)
         return cls._instance
     
     def initialize(self) -> None:
@@ -42,7 +46,7 @@ class Database:
         # SQLite connection URL
         database_url = f"sqlite+pysqlite:///{db_path}"
         
-        # Create engine
+        # Create engine - StaticPool is best for SQLite with WAL mode
         self._engine = create_engine(
             database_url,
             connect_args={
@@ -60,12 +64,13 @@ class Database:
             autoflush=False
         )
         
-        # Enable foreign keys for SQLite
+        # Enable foreign keys and WAL mode for SQLite
         @event.listens_for(self._engine, "connect")
         def set_sqlite_pragma(dbapi_connection, connection_record):
             cursor = dbapi_connection.cursor()
             cursor.execute("PRAGMA foreign_keys=ON")
             cursor.execute("PRAGMA journal_mode=WAL")
+            cursor.execute("PRAGMA busy_timeout=5000")
             cursor.close()
     
     @property

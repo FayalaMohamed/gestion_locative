@@ -1,5 +1,6 @@
 """Immeuble repository"""
 from typing import Optional, List
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models.entities import Immeuble
@@ -29,7 +30,6 @@ class ImmeubleRepository(BaseRepository[Immeuble]):
     
     def get_with_bureaux_count(self) -> List[Immeuble]:
         """Get all immeubles with their bureaux count"""
-        from sqlalchemy import func
         return self.session.query(
             Immeuble,
             func.count(Immeuble.bureaux).label('bureaux_count')

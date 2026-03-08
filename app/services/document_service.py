@@ -53,7 +53,7 @@ class DocumentService:
 
     def save_tree_config(self, entity_type: str, tree_structure: Dict[str, Any]) -> None:
         self.repo.create_tree_config(entity_type, tree_structure)
-        self.session.commit()
+        self.session.flush()
 
     def flatten_tree_paths(self, tree: Dict[str, Any], prefix: str = "") -> List[Tuple[str, str]]:
         """Convert tree structure to list of (display_path, storage_path) tuples"""
@@ -138,7 +138,7 @@ class DocumentService:
             result = self.upload_file(entity_type, entity_id, folder_path, source_path, desc)
             if result:
                 results.append(result)
-        self.session.commit()
+        self.session.flush()
         return results
 
     def get_file_path(self, doc_id: int) -> Optional[Path]:
@@ -161,7 +161,7 @@ class DocumentService:
 
             result = self.repo.delete_document(doc_id)
             if result:
-                self.session.commit()
+                self.session.flush()
             return result
         except Exception as e:
             logger.error(f"Failed to delete file: {e}")
@@ -182,7 +182,7 @@ class DocumentService:
                 shutil.move(str(old_path), str(new_path))
 
             doc = self.repo.update_document(doc_id, folder_path=new_folder_path)
-            self.session.commit()
+            self.session.flush()
             return {
                 "id": doc.id,
                 "folder_path": doc.folder_path,
@@ -197,7 +197,7 @@ class DocumentService:
         try:
             doc = self.repo.update_document(doc_id, **kwargs)
             if doc:
-                self.session.commit()
+                self.session.flush()
                 return {
                     "id": doc.id,
                     "original_name": doc.original_name,
@@ -240,7 +240,7 @@ class DocumentService:
                 filename=new_path.name,
                 original_name=new_name
             )
-            self.session.commit()
+            self.session.flush()
 
             return {
                 "id": doc.id,

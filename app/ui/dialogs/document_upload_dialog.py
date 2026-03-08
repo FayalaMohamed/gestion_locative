@@ -329,19 +329,20 @@ class DocumentUploadDialog(QDialog):
             from app.services.document_service import DocumentService
             
             db = get_database()
-            doc_service = DocumentService(db.get_session())
-            
-            docs = doc_service.get_documents_by_folder(
-                self.entity_type, 
-                self.entity_id, 
-                folder_path
-            )
-            
-            for doc in docs:
-                if doc.get("original_name", "").lower() == filename.lower():
-                    return True
-                    
-            return False
+            with db.session_scope() as session:
+                doc_service = DocumentService(session)
+                
+                docs = doc_service.get_documents_by_folder(
+                    self.entity_type, 
+                    self.entity_id, 
+                    folder_path
+                )
+                
+                for doc in docs:
+                    if doc.get("original_name", "").lower() == filename.lower():
+                        return True
+                        
+                return False
         except Exception:
             return False
 

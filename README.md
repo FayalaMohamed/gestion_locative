@@ -176,8 +176,8 @@ cd gestion_locative
 ### 2. Créer l'environnement conda
 
 ```bash
-conda create -n location python=3.11
-conda activate location
+conda create -n gestion_locative python=3.11
+conda activate gestion_locative
 ```
 
 ### 3. Installer les dépendances
@@ -192,7 +192,7 @@ pip install -r requirements.txt
 
 ```bash
 # Activer l'environnement
-conda activate location
+conda activate gestion_locative
 
 # Lancer l'application
 python main.py
@@ -212,7 +212,7 @@ python app/init_db.py --seed
 
 ```powershell
 # Activer l'environnement
-conda activate location
+conda activate gestion_locative
 
 # Supprimer et recréer avec données
 Remove-Item data\gestion_locative.db -ErrorAction SilentlyContinue
@@ -228,7 +228,7 @@ python main.py
 
 ```bash
 # Activer l'environnement
-conda activate location
+conda activate gestion_locative
 
 # Exécuter tous les tests
 python run_tests.py
@@ -385,7 +385,7 @@ L'application supporte plusieurs signatures pour les reçus :
 
 ```bash
 # Activer l'environnement conda
-conda activate location
+conda activate gestion_locative
 
 # Builder l'executable
 pyinstaller --onefile --windowed --clean gestion_locative.spec
@@ -394,7 +394,7 @@ pyinstaller --onefile --windowed --clean gestion_locative.spec
 Ou avec conda run :
 
 ```bash
-conda run -n location pyinstaller --clean gestion_locative.spec
+conda run -n gestion_locative pyinstaller --clean gestion_locative.spec
 ```
 
 ### Fichiers à Distribuer au Client

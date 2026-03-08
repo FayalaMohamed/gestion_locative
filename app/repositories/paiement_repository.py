@@ -1,11 +1,11 @@
 """Paiement repository"""
 from typing import Optional, List
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, or_, func
 
-from app.models.entities import Paiement, TypePaiement
+from app.models.entities import Paiement, TypePaiement, Contrat
 from app.repositories.base import BaseRepository
 
 
@@ -19,9 +19,9 @@ class PaiementRepository(BaseRepository[Paiement]):
         """Get all payments for a contrat"""
         return self.filter_by(contrat_id=contrat_id)
     
-    def get_by_locataire(self, Locataire_id: int) -> List[Paiement]:
+    def get_by_locataire(self, locataire_id: int) -> List[Paiement]:
         """Get all payments for a Locataire"""
-        return self.filter_by(Locataire_id=Locataire_id)
+        return self.filter_by(locataire_id=locataire_id)
     
     def get_by_type(self, type_paiement: TypePaiement) -> List[Paiement]:
         """Get payments by type"""
@@ -52,7 +52,6 @@ class PaiementRepository(BaseRepository[Paiement]):
             upto_date = date.today()
         
         # Get all contrat details
-        from app.models.entities import Contrat
         contrat = self.session.query(Contrat).filter(Contrat.id == contrat_id).first()
         if not contrat:
             return []
@@ -84,8 +83,6 @@ class PaiementRepository(BaseRepository[Paiement]):
     
     def get_total_loyers_payes(self, contrat_id: int, year: int = None) -> Decimal:
         """Get total rent paid for a contrat (optionally for a specific year)"""
-        from sqlalchemy import func
-        
         query = self.session.query(
             func.coalesce(func.sum(Paiement.montant_total), 0)
         ).filter(
@@ -104,13 +101,13 @@ class PaiementRepository(BaseRepository[Paiement]):
         result = query.scalar()
         return result if result else Decimal("0")
     
-    def create_paiement_loyer(self, Locataire_id: int, contrat_id: int,
+    def create_paiement_loyer(self, locataire_id: int, contrat_id: int,
                                montant_total: Decimal, date_paiement: date,
                                date_debut_periode: date, date_fin_periode: date,
                                commentaire: str = None) -> Paiement:
         """Create a rent payment"""
         return self.create(
-            Locataire_id=Locataire_id,
+            locataire_id=locataire_id,
             contrat_id=contrat_id,
             type_paiement=TypePaiement.LOYER,
             montant_total=montant_total,
@@ -120,12 +117,12 @@ class PaiementRepository(BaseRepository[Paiement]):
             commentaire=commentaire
         )
     
-    def create_paiement_autre(self, Locataire_id: int, contrat_id: int,
+    def create_paiement_autre(self, locataire_id: int, contrat_id: int,
                                type_paiement: TypePaiement, montant_total: Decimal,
                                date_paiement: date, commentaire: str = None) -> Paiement:
         """Create a non-rent payment (caution, pas de porte, etc.)"""
         return self.create(
-            Locataire_id=Locataire_id,
+            locataire_id=locataire_id,
             contrat_id=contrat_id,
             type_paiement=type_paiement,
             montant_total=montant_total,
@@ -135,7 +132,6 @@ class PaiementRepository(BaseRepository[Paiement]):
     
     def get_recents(self, jours: int = 30) -> List[Paiement]:
         """Get recent payments within N days"""
-        from datetime import timedelta
         start_date = date.today() - timedelta(days=jours)
         return self.get_by_periode(start_date, date.today())
     
@@ -154,8 +150,6 @@ class PaiementRepository(BaseRepository[Paiement]):
                                    start_date: date = None,
                                    end_date: date = None) -> Decimal:
         """Get total amount for a payment type within date range"""
-        from sqlalchemy import func
-        
         query = self.session.query(
             func.coalesce(func.sum(Paiement.montant_total), 0)
         ).filter(
