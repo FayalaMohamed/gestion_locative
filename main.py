@@ -64,11 +64,61 @@ def migrate_config():
 
 def run_database_migrations():
     """Run Alembic migrations on startup"""
+    import sys
     try:
         from alembic import command
         from alembic.config import Config as AlembicConfig
+        from sqlalchemy import create_engine, text
         
-        alembic_cfg = AlembicConfig("alembic.ini")
+        # Determine the correct path to alembic.ini and alembic folder
+        if getattr(sys, 'frozen', False):
+            # Running as compiled exe
+            base_dir = Path(sys._MEIPASS)
+            alembic_ini_path = base_dir / "alembic.ini"
+            alembic_script_location = str(base_dir / "alembic")
+        else:
+            # Running from source
+            alembic_ini_path = Path(__file__).parent / "alembic.ini"
+            alembic_script_location = "alembic"
+        
+        alembic_cfg = AlembicConfig(str(alembic_ini_path))
+        alembic_cfg.set_main_option('script_location', alembic_script_location)
+        
+        # Check if database exists and has tables but no alembic_version
+        # This handles databases created before Alembic was set up
+        from app.utils.config import Config
+        config = Config()
+        db_path = Path(config.database_path)
+        
+        # Ensure data directory exists
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Set the correct database URL for Alembic
+        alembic_cfg.set_main_option('sqlalchemy.url', f'sqlite:///{db_path}')
+        
+        if db_path.exists():
+            engine = create_engine(f"sqlite:///{db_path}")
+            with engine.connect() as conn:
+                # Check if immeubles table exists (main table)
+                result = conn.execute(text(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name='immeubles'"
+                ))
+                table_exists = result.fetchone() is not None
+                
+                # Check if alembic_version table exists
+                result = conn.execute(text(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name='alembic_version'"
+                ))
+                alembic_version_exists = result.fetchone() is not None
+            
+            # If tables exist but alembic_version doesn't, this is a v0.1 database
+            # created without Alembic. Stamp it with the first migration revision
+            # so the second migration (001_rename_columns_and_add_indexes) will run
+            if table_exists and not alembic_version_exists:
+                print("Legacy v0.1 database detected - stamping with initial migration")
+                command.stamp(alembic_cfg, "e23588e3971c")
+        
+        # Run migrations
         command.upgrade(alembic_cfg, "head")
         print("Database migrations completed successfully")
     except Exception as e:
@@ -84,7 +134,6 @@ def run_database_migrations():
                 f"La migration de la base de données a échoué:\n{str(e)}\n\n"
                 "L'application va se fermer. Veuillez contacter le support."
             )
-        import sys
         sys.exit(1)
 
 
@@ -398,7 +447,7 @@ class MainWindow(QMainWindow):
                 )
                 return
             
-            # Show downloading message
+            # Show downloading message with progress
             downloading_msg = QMessageBox(self)
             downloading_msg.setWindowTitle("Téléchargement")
             downloading_msg.setText("Téléchargement de la mise à jour...")
@@ -415,13 +464,65 @@ class MainWindow(QMainWindow):
             ssl_context.check_hostname = False
             ssl_context.verify_mode = ssl.CERT_NONE
             
-            # Download
+            # Download with redirect handling
             req = urllib.request.Request(download_url, headers={'User-Agent': 'GestionLocativeApp'})
-            with urllib.request.urlopen(req, context=ssl_context, timeout=60) as response:
-                with open(temp_exe_path, 'wb') as f:
-                    f.write(response.read())
             
+            # Follow redirects manually to handle GitHub's CDN
+            max_redirects = 5
+            redirect_count = 0
+            response = None
+            while redirect_count < max_redirects:
+                try:
+                    response = urllib.request.urlopen(req, context=ssl_context, timeout=60)
+                    break
+                except urllib.error.HTTPError as e:
+                    if e.code in (301, 302, 303, 307, 308) and 'Location' in e.headers:
+                        redirect_url = e.headers['Location']
+                        print(f"Redirect {redirect_count + 1}: {redirect_url}")
+                        req = urllib.request.Request(redirect_url, headers={'User-Agent': 'GestionLocativeApp'})
+                        redirect_count += 1
+                    else:
+                        raise
+            
+            if response is None or redirect_count >= max_redirects:
+                raise Exception("Too many redirects or no response received")
+            
+            # Get expected content length
+            content_length = response.headers.get('Content-Length')
+            expected_size = int(content_length) if content_length else 0
+            
+            # Download with progress
+            downloaded = 0
+            chunk_size = 8192
+            with open(temp_exe_path, 'wb') as f:
+                while True:
+                    chunk = response.read(chunk_size)
+                    if not chunk:
+                        break
+                    f.write(chunk)
+                    downloaded += len(chunk)
+                    if expected_size > 0:
+                        progress = int((downloaded / expected_size) * 100)
+                        downloading_msg.setText(f"Téléchargement de la mise à jour... {progress}%")
+                        QApplication.processEvents()
+            
+            response.close()
             downloading_msg.close()
+            
+            # Verify file size
+            actual_size = os.path.getsize(temp_exe_path)
+            if expected_size > 0 and actual_size != expected_size:
+                os.remove(temp_exe_path)
+                raise Exception(f"Download incomplete: expected {expected_size} bytes, got {actual_size} bytes")
+            
+            print(f"Downloaded {actual_size} bytes")
+            
+            # Verify it's a valid executable (check PE header)
+            with open(temp_exe_path, 'rb') as f:
+                header = f.read(2)
+                if header != b'MZ':
+                    os.remove(temp_exe_path)
+                    raise Exception("Downloaded file is not a valid Windows executable")
             
             # Get current executable path and directory
             current_exe_path = sys.executable
@@ -447,24 +548,54 @@ class MainWindow(QMainWindow):
                 shutil.copy2(db_path, backup_path)
                 print(f"Database backed up to: {backup_path}")
             
+            # Get file size for verification
+            downloaded_size = os.path.getsize(temp_exe_path)
+            
             # Get the actual exe name for taskkill
             exe_name = os.path.basename(current_exe_path)
             
             # Create log file for debugging
             log_path = os.path.join(temp_dir, "update_log.txt")
             
-            # Create batch script for update with logging
+            # Create batch script for update with logging and file size verification
             batch_script = f'''@echo off
+setlocal enabledelayedexpansion
 set LOG_FILE={log_path}
+set EXPECTED_SIZE={downloaded_size}
+set TEMP_EXE={temp_exe_path}
+set TARGET_EXE={current_exe_path}
+
 echo Update started at %DATE% %TIME% > "%LOG_FILE%"
-echo Temp exe: {temp_exe_path} >> "%LOG_FILE%"
-echo Target exe: {current_exe_path} >> "%LOG_FILE%"
-echo Exe name: {exe_name} >> "%LOG_FILE%"
+echo Temp exe: %TEMP_EXE% >> "%LOG_FILE%"
+echo Target exe: %TARGET_EXE% >> "%LOG_FILE%"
+echo Expected size: %EXPECTED_SIZE% bytes >> "%LOG_FILE%"
 
 echo.
 echo ========================================
 echo   MISE A JOUR EN COURS
 echo ========================================
+echo.
+
+REM Verify temp file exists and has correct size
+if not exist "%TEMP_EXE%" (
+    echo ERREUR: Fichier temporaire introuvable!
+    echo ERROR: Temp file not found >> "%LOG_FILE%"
+    goto :error
+)
+
+for %%A in ("%TEMP_EXE%") do set ACTUAL_SIZE=%%~zA
+echo Taille du fichier telecharge: %ACTUAL_SIZE% bytes
+echo Downloaded file size: %ACTUAL_SIZE% bytes >> "%LOG_FILE%"
+
+if not "%ACTUAL_SIZE%"=="%EXPECTED_SIZE%" (
+    echo ERREUR: Taille de fichier incorrecte! Attendu: %EXPECTED_SIZE%, Recu: %ACTUAL_SIZE%
+    echo ERROR: File size mismatch! Expected: %EXPECTED_SIZE%, Got: %ACTUAL_SIZE% >> "%LOG_FILE%"
+    goto :error
+)
+
+echo Verification du fichier telecharge: OK
+echo Temp file verified >> "%LOG_FILE%"
+
 echo.
 echo Fermeture de l'application dans 5 secondes...
 timeout /t 5 /nobreak
@@ -485,47 +616,72 @@ echo.
 echo Attente de 3 secondes pour liberation des fichiers...
 timeout /t 3 /nobreak
 
+REM Try to clear old PyInstaller temp folders to avoid conflicts
+echo.
+echo Nettoyage des anciens fichiers temporaires...
+echo Cleaning old temp files... >> "%LOG_FILE%"
+for /d %%i in ("%TEMP%\\_MEI*") do (
+    echo Removing old temp dir: %%i >> "%LOG_FILE%"
+    rd /s /q "%%i" 2>>"%LOG_FILE%"
+)
+
+echo.
+echo Attente supplementaire de 2 secondes...
+timeout /t 2 /nobreak
+
 echo.
 echo Copie du nouveau fichier...
 echo Copying file... >> "%LOG_FILE%"
-copy /Y "{temp_exe_path}" "{current_exe_path}" >> "%LOG_FILE%" 2>&1
+copy /Y "%TEMP_EXE%" "%TARGET_EXE%" >> "%LOG_FILE%" 2>&1
 set COPY_RESULT=%errorlevel%
 
-if %COPY_RESULT% == 0 (
-    echo.
-    echo Copie reussie!
-    echo Copy successful >> "%LOG_FILE%"
-    
-    echo.
-    echo Verification du fichier copie...
-    if exist "{current_exe_path}" (
-        echo Fichier verifie avec succes.
-        echo File verified >> "%LOG_FILE%"
-    ) else (
-        echo ERREUR: Le fichier n'existe pas apres copie!
-        echo ERROR: File does not exist after copy >> "%LOG_FILE%"
-        goto :error
-    )
-    
-    echo.
-    echo Attente de 2 secondes avant redemarrage...
-    timeout /t 2 /nobreak
-    
-    echo.
-    echo Demarrage de la nouvelle version...
-    echo Starting new version... >> "%LOG_FILE%"
-    start "" "{current_exe_path}"
-    
-    echo.
-    echo ========================================
-    echo   MISE A JOUR TERMINEE AVEC SUCCES!
-    echo ========================================
-    echo Update completed successfully >> "%LOG_FILE%"
-    timeout /t 2 /nobreak
-    goto :cleanup
-) else (
+if %COPY_RESULT% neq 0 (
+    echo ERREUR: Echec de la copie! Code: %COPY_RESULT%
+    echo Copy failed with error %COPY_RESULT% >> "%LOG_FILE%"
     goto :error
 )
+
+echo.
+echo Verification du fichier copie...
+if not exist "%TARGET_EXE%" (
+    echo ERREUR: Le fichier n'existe pas apres copie!
+    echo ERROR: File does not exist after copy >> "%LOG_FILE%"
+    goto :error
+)
+
+for %%A in ("%TARGET_EXE%") do set COPIED_SIZE=%%~zA
+echo Taille du fichier copie: %COPIED_SIZE% bytes
+echo Copied file size: %COPIED_SIZE% bytes >> "%LOG_FILE%"
+
+if not "%COPIED_SIZE%"=="%EXPECTED_SIZE%" (
+    echo ERREUR: Taille apres copie incorrecte! Attendu: %EXPECTED_SIZE%, Recu: %COPIED_SIZE%
+    echo ERROR: Copied file size mismatch! Expected: %EXPECTED_SIZE%, Got: %COPIED_SIZE% >> "%LOG_FILE%"
+    goto :error
+)
+
+echo Verification post-copie: OK
+echo Post-copy verification passed >> "%LOG_FILE%"
+
+echo.
+echo Attente de 2 secondes avant redemarrage...
+timeout /t 2 /nobreak
+
+echo.
+echo Demarrage de la nouvelle version...
+echo Starting new version... >> "%LOG_FILE%"
+echo Target exe: %TARGET_EXE% >> "%LOG_FILE%"
+
+REM Use PowerShell to start the new version (more reliable than start command)
+powershell -WindowStyle Hidden -Command "Start-Process '%TARGET_EXE%'"
+echo PowerShell start command executed >> "%LOG_FILE%"
+
+echo.
+echo ========================================
+echo   MISE A JOUR TERMINEE AVEC SUCCES!
+echo ========================================
+echo Update completed successfully >> "%LOG_FILE%"
+timeout /t 2 /nobreak
+goto :cleanup
 
 :error
 echo.
@@ -533,11 +689,8 @@ echo ========================================
 echo   ERREUR LORS DE LA MISE A JOUR
 echo ========================================
 echo.
-echo Code d'erreur de copie: %COPY_RESULT%
-echo Copy failed with error %COPY_RESULT% >> "%LOG_FILE%"
-echo.
 echo Le fichier de log se trouve ici:
-echo {log_path}
+echo %LOG_FILE%
 echo.
 echo Vous pouvez telecharger manuellement la mise a jour depuis:
 echo https://github.com/{GITHUB_REPO}/releases/latest
@@ -546,7 +699,7 @@ pause
 
 :cleanup
 echo Cleaning up... >> "%LOG_FILE%"
-del "{temp_exe_path}" 2>>"%LOG_FILE%"
+del "%TEMP_EXE%" 2>>"%LOG_FILE%"
 del "%~f0" 2>>"%LOG_FILE%"
 '''
             

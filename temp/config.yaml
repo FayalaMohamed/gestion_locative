@@ -1,0 +1,13 @@
+app:
+  debug: true
+  version: '0.2'
+database:
+  path: data/gestion_locative.db
+export:
+  backup_directory: data/backups
+receipts:
+  company_name: Magic House
+  company_names:
+  - Magic House
+  signature_path: ''
+  signatures: null
