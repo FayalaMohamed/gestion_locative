@@ -73,7 +73,7 @@ Ce guide explique comment créer et distribuer une nouvelle version de l'applica
     conda activate gestion_locative
     
     # Builder l'exécutable
-    pyinstaller --clean gestion_locative.spec
+    python -m PyInstaller --clean gestion_locative.spec
     ```
 
 2. **Vérifier le build**:
@@ -328,7 +328,7 @@ Avant de publier une nouvelle version, vérifier:
 
 6. **Builder**:
     ```bash
-    pyinstaller --clean gestion_locative.spec
+    python -m PyInstaller --clean gestion_locative.spec
     ```
 
 7. **Tester l'exécutable**:
